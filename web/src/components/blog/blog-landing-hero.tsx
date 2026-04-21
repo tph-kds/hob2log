@@ -4,7 +4,6 @@ import { motion, useMotionTemplate, useMotionValue, useReducedMotion, useScroll,
 import type { CSSProperties, PointerEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HeroAnimatedCopy } from "@/components/hero/hero-animated-copy";
-import { LiquidDistortionCanvas } from "@/components/hero/liquid-distortion-canvas";
 
 interface BlogLandingHeroProps {
   ctaHref?: string;
@@ -38,7 +37,7 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
   const shiftX = useMotionValue(0);
   const shiftY = useMotionValue(0);
   const [isHeroPointerInside, setIsHeroPointerInside] = useState(false);
-  const [isTextFocus, setIsTextFocus] = useState(false);
+  const [isTitleFocus, setIsTitleFocus] = useState(false);
   const [droplets, setDroplets] = useState<
     Array<{ id: number; x: number; y: number; dx: number; dy: number; size: number; duration: number; delay: number }>
   >([]);
@@ -141,7 +140,7 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
     setIsHeroPointerInside(true);
   }
 
-  function spawnDropletBurst(event: PointerEvent<HTMLDivElement>) {
+  function spawnDropletBurst(event: PointerEvent<HTMLElement>) {
     if (!heroRef.current || prefersReducedMotion) {
       return;
     }
@@ -189,22 +188,22 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
     });
   }
 
-  function handleTextPointerMove(event: PointerEvent<HTMLDivElement>) {
-    setIsTextFocus(true);
+  function handleTitlePointerMove(event: PointerEvent<HTMLElement>) {
+    setIsTitleFocus(true);
     spawnDropletBurst(event);
   }
 
-  function handleTextPointerEnter() {
-    setIsTextFocus(true);
+  function handleTitlePointerEnter() {
+    setIsTitleFocus(true);
   }
 
-  function handleTextPointerLeave() {
-    setIsTextFocus(false);
+  function handleTitlePointerLeave() {
+    setIsTitleFocus(false);
   }
 
   function handleHeroPointerLeave() {
     setIsHeroPointerInside(false);
-    setIsTextFocus(false);
+    setIsTitleFocus(false);
 
     if (prefersReducedMotion) {
       return;
@@ -221,7 +220,7 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
   return (
     <motion.section
       ref={heroRef}
-      className={`blog-landing-hero ${isHeroPointerInside ? "is-hero-hover" : ""} ${isTextFocus ? "is-text-focus" : ""}`}
+      className={`blog-landing-hero rounded-3xl overflow-hidden ${isHeroPointerInside ? "is-hero-hover" : ""} ${isTitleFocus ? "is-title-focus" : ""} `}
       onPointerMove={handleHeroPointerMove}
       onPointerLeave={handleHeroPointerLeave}
       initial={prefersReducedMotion ? false : { opacity: 0, y: 16 }}
@@ -237,10 +236,8 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
       } as CSSProperties}
     >
       <div className="hero-cursor-orb" aria-hidden="true" />
-      <div className="hero-focus-zone" aria-hidden="true" />
       <div className="blog-landing-hero-backdrop" aria-hidden="true" />
       <div className="blog-landing-noise" aria-hidden="true" />
-      <LiquidDistortionCanvas pointerX={glowX} pointerY={glowY} isActive={isTextFocus} />
 
       <motion.div
         className="blog-landing-dna"
@@ -303,9 +300,9 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
         ctaHref={ctaHref}
         ctaLabel={ctaLabel}
         scrollHint={scrollHint}
-        onTextPointerMove={handleTextPointerMove}
-        onTextPointerEnter={handleTextPointerEnter}
-        onTextPointerLeave={handleTextPointerLeave}
+        onTitlePointerMove={handleTitlePointerMove}
+        onTitlePointerEnter={handleTitlePointerEnter}
+        onTitlePointerLeave={handleTitlePointerLeave}
       />
 
       <div className="hero-water-burst-layer" aria-hidden="true">

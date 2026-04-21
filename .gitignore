@@ -44,3 +44,5 @@ next-env.d.ts
 !README.md
 !CLAUDE.md
 !AGENTS.md
+
+assets/*

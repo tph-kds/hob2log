@@ -1,41 +1,108 @@
 import Link from "next/link";
 import { BlogLandingHero } from "@/components/blog/blog-landing-hero";
-import { FloatingCardExperience } from "@/components/cards/floating-card-experience";
+import { CardTopicWrapper } from "@/components/cards/card-topic-wrapper";
+import { MagneticCardLink } from "@/components/cards/magnetic-card";
 import { LiquidSection } from "@/components/layout/liquid-section";
 import { SiteFooter } from "@/components/layout/site-footer";
-import { SiteHeader } from "@/components/layout/site-header";
 import { listPosts } from "@/lib/posts-store";
 
 export const dynamic = "force-dynamic";
 
 export default function Home() {
   const featuredPosts = listPosts().slice(0, 3);
-  const cardImage1 =
-    process.env.NEXT_PUBLIC_CARD_IMAGE_1 ??
-    "https://res.cloudinary.com/demo/image/upload/w_800,h_800,c_fill,f_webp/sample.jpg";
-  const cardImage2 =
-    process.env.NEXT_PUBLIC_CARD_IMAGE_2 ??
-    "https://res.cloudinary.com/demo/image/upload/w_800,h_800,c_fill,f_webp/samples/animals/cat.jpg";
+  const yugiohCards = [
+    {
+      id: "ygo-a", title: "Dark Magician", phaseOffset: 0.0,
+      imageUrl: process.env.NEXT_PUBLIC_YUGIOH_CARD_IMAGE_1 ?? process.env.NEXT_PUBLIC_CARD_IMAGE_1 ?? "https://res.cloudinary.com/demo/image/upload/w_800,h_800,c_fill,f_webp/sample.jpg",
+      backImageUrl: process.env.NEXT_PUBLIC_YUGIOH_BACKCARD_IMAGE_1 ?? process.env.NEXT_PUBLIC_BACKCARD_IMAGE_1 ?? "https://res.cloudinary.com/demo/image/upload/w_800,h_800,c_fill,f_webp/samples/landscapes/beach-boat.jpg"
+    },
+    {
+      id: "ygo-b", title: "Blue Eyes", phaseOffset: 1.8,
+      imageUrl: process.env.NEXT_PUBLIC_YUGIOH_CARD_IMAGE_2 ?? process.env.NEXT_PUBLIC_CARD_IMAGE_2 ?? "https://res.cloudinary.com/demo/image/upload/w_800,h_800,c_fill,f_webp/samples/animals/cat.jpg",
+      backImageUrl: process.env.NEXT_PUBLIC_YUGIOH_BACKCARD_IMAGE_2 ?? process.env.NEXT_PUBLIC_BACKCARD_IMAGE_2 ?? "https://res.cloudinary.com/demo/image/upload/w_800,h_800,c_fill,f_webp/samples/food/fish-vegetables.jpg"
+    },
+    {
+      id: "ygo-c", title: "Red Eyes", phaseOffset: 3.2,
+      imageUrl: process.env.NEXT_PUBLIC_YUGIOH_CARD_IMAGE_3 ?? process.env.NEXT_PUBLIC_CARD_IMAGE_3 ?? "https://res.cloudinary.com/demo/image/upload/w_800,h_800,c_fill,f_webp/samples/landscapes/beach-boat.jpg",
+      backImageUrl: process.env.NEXT_PUBLIC_YUGIOH_BACKCARD_IMAGE_3 ?? process.env.NEXT_PUBLIC_BACKCARD_IMAGE_3 ?? "https://res.cloudinary.com/demo/image/upload/w_800,h_800,c_fill,f_webp/samples/people/smiling-man.jpg"
+    },
+    {
+      id: "ygo-d", title: "Kuriboh", phaseOffset: 0.9,
+      imageUrl: process.env.NEXT_PUBLIC_YUGIOH_CARD_IMAGE_4 ?? process.env.NEXT_PUBLIC_CARD_IMAGE_4 ?? "https://res.cloudinary.com/demo/image/upload/w_800,h_800,c_fill,f_webp/samples/food/fish-vegetables.jpg",
+      backImageUrl: process.env.NEXT_PUBLIC_YUGIOH_BACKCARD_IMAGE_4 ?? process.env.NEXT_PUBLIC_BACKCARD_IMAGE_4 ?? "https://res.cloudinary.com/demo/image/upload/w_800,h_800,c_fill,f_webp/sample.jpg"
+    },
+    {
+      id: "ygo-e", title: "Exodia", phaseOffset: 2.5,
+      imageUrl: process.env.NEXT_PUBLIC_YUGIOH_CARD_IMAGE_5 ?? process.env.NEXT_PUBLIC_CARD_IMAGE_5 ?? "https://res.cloudinary.com/demo/image/upload/w_800,h_800,c_fill,f_webp/samples/people/smiling-man.jpg",
+      backImageUrl: process.env.NEXT_PUBLIC_YUGIOH_BACKCARD_IMAGE_5 ?? process.env.NEXT_PUBLIC_BACKCARD_IMAGE_5 ?? "https://res.cloudinary.com/demo/image/upload/w_800,h_800,c_fill,f_webp/samples/animals/cat.jpg"
+    },
+  ];
 
-  const floatingCards = [
+  const pokemonCards = [
     {
-      id: "dark-magician",
-      title: "Dark Magician",
-      imageUrl: cardImage1,
-      phaseOffset: 0,
+      id: "poke-a", title: "Charizard", phaseOffset: 0.0,
+      imageUrl: process.env.NEXT_PUBLIC_POKEMON_CARD_IMAGE_1 ?? yugiohCards[0].imageUrl,
+      backImageUrl: process.env.NEXT_PUBLIC_POKEMON_BACKCARD_IMAGE_1 ?? yugiohCards[0].backImageUrl
     },
     {
-      id: "pikachu",
-      title: "Pikachu",
-      imageUrl: cardImage2,
-      phaseOffset: 1.8,
+      id: "poke-b", title: "Pikachu", phaseOffset: 1.8,
+      imageUrl: process.env.NEXT_PUBLIC_POKEMON_CARD_IMAGE_2 ?? yugiohCards[1].imageUrl,
+      backImageUrl: process.env.NEXT_PUBLIC_POKEMON_BACKCARD_IMAGE_2 ?? yugiohCards[1].backImageUrl
     },
+    {
+      id: "poke-c", title: "Mewtwo", phaseOffset: 3.2,
+      imageUrl: process.env.NEXT_PUBLIC_POKEMON_CARD_IMAGE_3 ?? yugiohCards[2].imageUrl,
+      backImageUrl: process.env.NEXT_PUBLIC_POKEMON_BACKCARD_IMAGE_3 ?? yugiohCards[2].backImageUrl
+    },
+    {
+      id: "poke-d", title: "Gengar", phaseOffset: 0.9,
+      imageUrl: process.env.NEXT_PUBLIC_POKEMON_CARD_IMAGE_4 ?? yugiohCards[3].imageUrl,
+      backImageUrl: process.env.NEXT_PUBLIC_POKEMON_BACKCARD_IMAGE_4 ?? yugiohCards[3].backImageUrl
+    },
+    {
+      id: "poke-e", title: "Lugia", phaseOffset: 2.5,
+      imageUrl: process.env.NEXT_PUBLIC_POKEMON_CARD_IMAGE_5 ?? yugiohCards[4].imageUrl,
+      backImageUrl: process.env.NEXT_PUBLIC_POKEMON_BACKCARD_IMAGE_5 ?? yugiohCards[4].backImageUrl
+    },
+  ];
+
+  const onepieceCards = [
+    {
+      id: "op-a", title: "Luffy", phaseOffset: 0.0,
+      imageUrl: process.env.NEXT_PUBLIC_ONEPIECE_CARD_IMAGE_1 ?? yugiohCards[0].imageUrl,
+      backImageUrl: process.env.NEXT_PUBLIC_ONEPIECE_BACKCARD_IMAGE_1 ?? yugiohCards[0].backImageUrl
+    },
+    {
+      id: "op-b", title: "Zoro", phaseOffset: 1.8,
+      imageUrl: process.env.NEXT_PUBLIC_ONEPIECE_CARD_IMAGE_2 ?? yugiohCards[1].imageUrl,
+      backImageUrl: process.env.NEXT_PUBLIC_ONEPIECE_BACKCARD_IMAGE_2 ?? yugiohCards[1].backImageUrl
+    },
+    {
+      id: "op-c", title: "Sanji", phaseOffset: 3.2,
+      imageUrl: process.env.NEXT_PUBLIC_ONEPIECE_CARD_IMAGE_3 ?? yugiohCards[2].imageUrl,
+      backImageUrl: process.env.NEXT_PUBLIC_ONEPIECE_BACKCARD_IMAGE_3 ?? yugiohCards[2].backImageUrl
+    },
+    {
+      id: "op-d", title: "Nami", phaseOffset: 0.9,
+      imageUrl: process.env.NEXT_PUBLIC_ONEPIECE_CARD_IMAGE_4 ?? yugiohCards[3].imageUrl,
+      backImageUrl: process.env.NEXT_PUBLIC_ONEPIECE_BACKCARD_IMAGE_4 ?? yugiohCards[3].backImageUrl
+    },
+    {
+      id: "op-e", title: "Robin", phaseOffset: 2.5,
+      imageUrl: process.env.NEXT_PUBLIC_ONEPIECE_CARD_IMAGE_5 ?? yugiohCards[4].imageUrl,
+      backImageUrl: process.env.NEXT_PUBLIC_ONEPIECE_BACKCARD_IMAGE_5 ?? yugiohCards[4].backImageUrl
+    },
+  ];
+
+  const topics = [
+    { id: "yugioh", label: "Yu-Gi-Oh!", cards: yugiohCards },
+    { id: "pokemon", label: "Pokémon", cards: pokemonCards },
+    { id: "onepiece", label: "One Piece", cards: onepieceCards },
   ];
 
   return (
     <div className="page-shell">
-      <FloatingCardExperience cards={floatingCards} />
-      <SiteHeader />
+      <CardTopicWrapper topics={topics} />
 
       <BlogLandingHero ctaHref="#home-main" ctaLabel="Enter Workspace" scrollHint="Scroll down for latest notes" />
 
@@ -87,15 +154,19 @@ export default function Home() {
             <h2 className="text-2xl font-semibold">Recent Logs</h2>
             <div className="mt-6 grid gap-4">
               {featuredPosts.map((post) => (
-                <Link
+                <MagneticCardLink
                   key={post.slug}
                   href={`/blog/${post.slug}`}
-                  className="interactive-gradient-card rounded-2xl border border-white/10 bg-white/5 p-4"
+                  className="rounded-2xl border border-white/10 bg-white/5 p-4"
                 >
-                  <p className="text-sm uppercase tracking-[0.14em] text-(--accent-2)">{post.tags.join(" · ")}</p>
+                  <div className="post-tags-row">
+                    {post.tags.map((tag) => (
+                      <span key={tag} className="post-tag-badge">{tag}</span>
+                    ))}
+                  </div>
                   <h3 className="mt-2 text-xl font-medium">{post.title}</h3>
                   <p className="mt-2 text-sm text-(--muted)">{post.summary}</p>
-                </Link>
+                </MagneticCardLink>
               ))}
             </div>
           </LiquidSection>

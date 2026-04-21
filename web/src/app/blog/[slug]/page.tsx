@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { MarkdownRenderer } from "@/components/blog/markdown-renderer";
 import { LiquidSection } from "@/components/layout/liquid-section";
 import { SiteFooter } from "@/components/layout/site-footer";
-import { SiteHeader } from "@/components/layout/site-header";
 import { getPostBySlug, listPosts } from "@/lib/posts-store";
 import { Post } from "@/types/content";
 
@@ -96,7 +95,6 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
   return (
     <div className="page-shell">
-      <SiteHeader />
       <main className="page-main mx-auto w-full max-w-6xl px-6 pb-12 pt-20 md:px-10 md:pt-24">
         <LiquidSection className="rounded-3xl p-6 md:p-10">
           <p className="text-xs uppercase tracking-[0.18em] text-sky-200/85">Article Workspace</p>

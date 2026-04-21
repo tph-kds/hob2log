@@ -6,9 +6,11 @@ import { useEffect, useMemo, useState } from "react";
 const THEME_STORAGE_KEY = "hob2log-theme";
 const MOTION_STORAGE_KEY = "hob2log-motion";
 const CINEMATIC_INTRO_STORAGE_KEY = "hob2log-cinematic-intro";
+const CARD_TOPIC_STORAGE_KEY = "hob2log-card-topic";
 
 type MotionPreference = "system" | "force";
 type CinematicIntroPreference = "on" | "off";
+type CardTopicOption = "yugioh" | "pokemon" | "onepiece";
 
 interface ThemeOption {
   id: string;
@@ -51,6 +53,14 @@ function setDocumentCinematicIntro(preference: CinematicIntroPreference) {
   document.documentElement.setAttribute("data-cinematic-intro", preference);
 }
 
+function isCardTopicOption(value: string | null): value is CardTopicOption {
+  return value === "yugioh" || value === "pokemon" || value === "onepiece";
+}
+
+function setDocumentCardTopic(topic: CardTopicOption) {
+  document.documentElement.setAttribute("data-card-topic", topic);
+}
+
 export function ThemeSwitcher() {
   const [activeTheme, setActiveTheme] = useState(() => {
     if (typeof document === "undefined") {
@@ -77,6 +87,14 @@ export function ThemeSwitcher() {
     const currentPreference = document.documentElement.getAttribute("data-cinematic-intro");
     return isCinematicIntroPreference(currentPreference) ? currentPreference : "on";
   });
+  const [cardTopic, setCardTopic] = useState<CardTopicOption>(() => {
+    if (typeof document === "undefined") {
+      return "yugioh";
+    }
+
+    const currentTopic = document.documentElement.getAttribute("data-card-topic");
+    return isCardTopicOption(currentTopic) ? currentTopic : "yugioh";
+  });
   const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -86,10 +104,13 @@ export function ThemeSwitcher() {
     const resolvedMotion = isMotionPreference(storedMotion) ? storedMotion : "system";
     const storedIntro = localStorage.getItem(CINEMATIC_INTRO_STORAGE_KEY);
     const resolvedIntro = isCinematicIntroPreference(storedIntro) ? storedIntro : "on";
+    const storedTopic = localStorage.getItem(CARD_TOPIC_STORAGE_KEY);
+    const resolvedTopic = isCardTopicOption(storedTopic) ? storedTopic : "yugioh";
 
     setDocumentTheme(resolvedTheme);
     setDocumentMotion(resolvedMotion);
     setDocumentCinematicIntro(resolvedIntro);
+    setDocumentCardTopic(resolvedTopic);
   }, []);
 
   const selectedTheme = useMemo(() => {
@@ -115,8 +136,14 @@ export function ThemeSwitcher() {
     localStorage.setItem(CINEMATIC_INTRO_STORAGE_KEY, preference);
   }
 
+  function handleCardTopicChange(topic: CardTopicOption) {
+    setCardTopic(topic);
+    setDocumentCardTopic(topic);
+    localStorage.setItem(CARD_TOPIC_STORAGE_KEY, topic);
+  }
+
   return (
-    <div className="theme-fab-wrap" aria-label="Theme selection">
+    <div className="theme-fab-wrap z-[9999]" aria-label="Theme selection">
       <AnimatePresence>
         {isOpen ? (
           <motion.section
@@ -142,6 +169,26 @@ export function ThemeSwitcher() {
                   <span className="theme-chip-text">{theme.label}</span>
                 </button>
               ))}
+            </div>
+            <div className="theme-motion-controls mt-3">
+              <p className="theme-library-label">Card Topic</p>
+              <div className="theme-options mt-1" role="radiogroup" aria-label="Card Topic">
+                <button
+                  type="button" role="radio" aria-checked={cardTopic === "yugioh"}
+                  className={`theme-chip ${cardTopic === "yugioh" ? "is-active" : ""}`}
+                  onClick={() => handleCardTopicChange("yugioh")}
+                ><span className="theme-chip-text">Yu-Gi-Oh!</span></button>
+                <button
+                  type="button" role="radio" aria-checked={cardTopic === "pokemon"}
+                  className={`theme-chip ${cardTopic === "pokemon" ? "is-active" : ""}`}
+                  onClick={() => handleCardTopicChange("pokemon")}
+                ><span className="theme-chip-text">Pokémon</span></button>
+                <button
+                  type="button" role="radio" aria-checked={cardTopic === "onepiece"}
+                  className={`theme-chip ${cardTopic === "onepiece" ? "is-active" : ""}`}
+                  onClick={() => handleCardTopicChange("onepiece")}
+                ><span className="theme-chip-text">One Piece</span></button>
+              </div>
             </div>
             <div className="theme-motion-controls mt-3">
               <p className="theme-library-label">Motion Mode</p>

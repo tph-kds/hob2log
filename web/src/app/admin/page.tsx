@@ -1,12 +1,10 @@
 import Link from "next/link";
 import { LiquidSection } from "@/components/layout/liquid-section";
 import { SiteFooter } from "@/components/layout/site-footer";
-import { SiteHeader } from "@/components/layout/site-header";
 
 export default function AdminPage() {
   return (
     <div className="page-shell">
-      <SiteHeader />
       <main className="page-main mx-auto w-full max-w-5xl px-6 pb-12 pt-20 md:px-10 md:pt-24">
         <LiquidSection className="rounded-3xl p-6 md:p-8">
           <p className="text-xs uppercase tracking-[0.18em] text-sky-200/85">Admin Workspace</p>

@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 import { ProjectLogo } from "@/components/layout/project-logo";
 import { ThemeSwitcher } from "@/components/layout/theme-switcher";
+import { PageTransition } from "@/components/layout/page-transition";
+import { ScrollProgressRing } from "@/components/layout/scroll-progress-ring";
+import { SiteHeader } from "@/components/layout/site-header";
 import "./globals.css";
 
 const headingFont = Space_Grotesk({
@@ -66,7 +69,9 @@ export default function RootLayout({
       </head>
       <body suppressHydrationWarning className="min-h-full flex flex-col">
         <ProjectLogo />
-        {children}
+        <SiteHeader />
+        <PageTransition>{children}</PageTransition>
+        <ScrollProgressRing />
         <ThemeSwitcher />
       </body>
     </html>

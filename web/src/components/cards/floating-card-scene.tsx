@@ -25,6 +25,7 @@ interface FloatingCardInput {
   id: string;
   title: string;
   imageUrl: string;
+  backImageUrl: string;
   phaseOffset: number;
 }
 
@@ -150,18 +151,38 @@ function createRoundedRectShape(width: number, height: number, radius: number) {
 
 function getPath(index: number, progress: number) {
   const t = clamp(progress, 0, 1);
+  // Viewport bounds: locked to +/- 4.5 to keep cards on screen for 100% of scroll
+  const startY = 4.5;
+  const endY = -4.5;
 
-  if (index === 0) {
-    return {
-      x: MathUtils.lerp(2.05, -2.05, t) + Math.sin(t * Math.PI * 4) * 0.56,
-      y: MathUtils.lerp(0.95, -1.15, t) + Math.sin(t * Math.PI * 5) * 0.34,
-    };
+  switch (index % 4) {
+    case 0: // Left Frame Curve (Narrower to clear right menu)
+      return {
+        x: -1.8 + Math.sin(t * Math.PI * 1.5) * 0.4,
+        y: MathUtils.lerp(startY, endY, t),
+        z: -0.8,
+      };
+    case 1: // Right Frame Curve (Narrower to clear right menu)
+      return {
+        x: 1.4 - Math.cos(t * Math.PI * 1.5) * 0.4,
+        y: MathUtils.lerp(startY + 0.2, endY + 0.2, t),
+        z: -1.0,
+      };
+    case 2: // Central Orbit A (Narrower)
+      return {
+        x: MathUtils.lerp(-0.6, 0.8, t) + Math.cos(t * Math.PI * 2) * 0.8,
+        y: MathUtils.lerp(startY - 0.8, endY, t),
+        z: -0.4,
+      };
+    case 3: // Central Orbit B (Narrower)
+      return {
+        x: MathUtils.lerp(0.6, -0.8, t) + Math.sin(t * Math.PI * 2) * 0.8,
+        y: MathUtils.lerp(startY - 0.4, endY + 0.4, t),
+        z: -0.5,
+      };
+    default:
+      return { x: 0, y: 0, z: 0 };
   }
-
-  return {
-    x: MathUtils.lerp(-2.05, 2.02, t) + Math.cos(t * Math.PI * 3.4) * 0.58,
-    y: MathUtils.lerp(-1.05, 1.02, t) + Math.sin(t * Math.PI * 4.3) * 0.31,
-  };
 }
 
 function createRoundedRectGeometry(width: number, height: number, radius: number) {
@@ -283,6 +304,55 @@ function normalizeCardImageUrl(url: string) {
   }
 }
 
+function RailwayLines({ grade, pointerState }: { palette: ThemePalette, grade: ThemeColorGrade, pointerState: { x: number, y: number } }) {
+  const railPoints = useMemo(() => {
+    return [0, 1, 2, 3].map(idx => {
+      const pts = [];
+      for (let i = 0; i <= 60; i++) {
+        const p = getPath(idx, i / 60);
+        pts.push([p.x, p.y, p.z - 0.15]);
+      }
+      return pts;
+    });
+  }, []);
+
+  const railRef = useRef<Group>(null);
+
+  useFrame((state) => {
+    if (!railRef.current) return;
+    const elapsed = state.clock.getElapsedTime();
+    railRef.current.children.forEach((child, i) => {
+      child.position.x = pointerState.x * 0.08 * Math.sin(elapsed + i);
+      child.position.y = -pointerState.y * 0.05 * Math.cos(elapsed * 0.8 + i);
+    });
+  });
+
+  return (
+    <group ref={railRef}>
+      {railPoints.map((pts, i) => (
+        <group key={i}>
+          <Line
+            points={pts as any}
+            color={grade.trailPrimary}
+            lineWidth={1.0}
+            transparent
+            opacity={0.12}
+            blending={AdditiveBlending}
+          />
+          <Line
+            points={pts as any}
+            color={grade.trailSecondary}
+            lineWidth={2.8}
+            transparent
+            opacity={0.04}
+            blending={AdditiveBlending}
+          />
+        </group>
+      ))}
+    </group>
+  );
+}
+
 function TrailParticles({ count, phaseOffset, color, pointerState, profile, layerOffset, scrollProgress, lowOpacity, highOpacity }: TrailParticlesProps) {
   const attributeRef = useRef<BufferAttribute>(null);
   const materialRef = useRef<PointsMaterial>(null);
@@ -309,7 +379,6 @@ function TrailParticles({ count, phaseOffset, color, pointerState, profile, laye
     }
 
     const array = attribute.array as Float32Array;
-
     const elapsed = state.clock.getElapsedTime();
 
     for (let index = 0; index < count; index += 1) {
@@ -360,8 +429,9 @@ function CardMesh({ card, index, scrollProgress, pointerState, palette, profile,
   const borderMaterialRef = useRef<MeshPhysicalMaterial>(null);
   const glowMaterialRef = useRef<MeshPhysicalMaterial>(null);
   const cardImageUrl = useMemo(() => normalizeCardImageUrl(card.imageUrl), [card.imageUrl]);
+  const backImageUrl = useMemo(() => normalizeCardImageUrl(card.backImageUrl), [card.backImageUrl]);
 
-  const [rawTexture] = useLoader(TextureLoader, [cardImageUrl], (loader) => {
+  const [rawTexture, rawBackTexture] = useLoader(TextureLoader, [cardImageUrl, backImageUrl], (loader) => {
     loader.setCrossOrigin("anonymous");
   });
   const cardWidth = 1.516;
@@ -376,19 +446,32 @@ function CardMesh({ card, index, scrollProgress, pointerState, palette, profile,
     nextTexture.minFilter = LinearMipmapLinearFilter;
     nextTexture.magFilter = LinearFilter;
     nextTexture.anisotropy = 8;
-
     const imageAspect = getTextureAspect(nextTexture, cardAspect);
     applyCoverUv(nextTexture, imageAspect, cardAspect);
-
     nextTexture.needsUpdate = true;
     return nextTexture;
   }, [rawTexture, cardAspect]);
 
+  const backTexture = useMemo(() => {
+    const nextTexture = rawBackTexture.clone();
+    nextTexture.colorSpace = SRGBColorSpace;
+    nextTexture.wrapS = ClampToEdgeWrapping;
+    nextTexture.wrapT = ClampToEdgeWrapping;
+    nextTexture.minFilter = LinearMipmapLinearFilter;
+    nextTexture.magFilter = LinearFilter;
+    nextTexture.anisotropy = 8;
+    const imageAspect = getTextureAspect(nextTexture, cardAspect);
+    applyCoverUv(nextTexture, imageAspect, cardAspect);
+    nextTexture.needsUpdate = true;
+    return nextTexture;
+  }, [rawBackTexture, cardAspect]);
+
   useEffect(() => {
     return () => {
       texture.dispose();
+      backTexture.dispose();
     };
-  }, [texture]);
+  }, [texture, backTexture]);
 
   const imageGeometry = useMemo(
     () => normalizeGeometryUv(createRoundedRectGeometry(cardWidth, cardHeight, 0.126)),
@@ -413,6 +496,32 @@ function CardMesh({ card, index, scrollProgress, pointerState, palette, profile,
 
   const borderPoints = useMemo(() => createRoundedRectLinePoints(1.53, 2.13, 0.15, 56), []);
 
+  // Must be multiples of PI * 2 so they guarantee facing forward exactly at scroll extremeties (0 and 1)
+  const SPIN_PATTERNS = [
+    { x: 0, y: -Math.PI * 2, z: 0 },                        // Left spin
+    { x: Math.PI * 2, y: 0, z: 0 },                         // Somersault
+    { x: 0, y: Math.PI * 4, z: Math.PI * 2 },               // Double Y-spin + Z-roll
+    { x: -Math.PI * 2, y: Math.PI * 2, z: 0 },              // Complex tumble
+    { x: 0, y: Math.PI * 2, z: Math.PI * 2 },               // Simple tumble
+  ] as const;
+  const START_POSITIONS = [
+    { x: -1.8, y: 4.75, z: 1.5 },  // Narrowed to clear Nav
+    { x: 1.4, y: 4.2, z: 1.2 },    // Narrowed to clear Nav
+    { x: -1.2, y: 3.5, z: 2.8 },   // Tighter cluster
+    { x: 0.5, y: 3.5, z: 2.4 },    // Tighter cluster
+  ] as const;
+
+  const END_POSITIONS = [
+    { x: -1.6, y: -3.5, z: 2.2 },  // Narrowed to clear Nav
+    { x: 1.2, y: -3.5, z: 2.0 },   // Narrowed to clear Nav
+    { x: -0.7, y: -3.8, z: 3.5 },  // Tighter cluster
+    { x: 0.7, y: -3.8, z: 3.0 },   // Tighter cluster
+  ] as const;
+
+  const spinPattern = SPIN_PATTERNS[index % 4];
+  const startPos = START_POSITIONS[index % 4];
+  const endPos = END_POSITIONS[index % 4];
+
   useFrame((state, delta) => {
     const group = groupRef.current;
     const imageMesh = imageRef.current;
@@ -425,37 +534,67 @@ function CardMesh({ card, index, scrollProgress, pointerState, palette, profile,
       return;
     }
 
-    const travelProgress = smoothstep(0.08, 0.9, scrollProgress);
+    // Staggered travel progress for continuous presence
+    // Slightly reduced stagger for tighter group feel during fast scrolls
+    const stagger = (index * 0.08) % 0.2;
+    const travelProgress = clamp((scrollProgress - stagger) / (1.0 - stagger), 0, 1);
+    
     const path = getPath(index, travelProgress);
     const elapsed = state.clock.getElapsedTime();
     const phase = elapsed + card.phaseOffset;
-    const depthCycle = Math.sin(scrollProgress * Math.PI * 2.4 + card.phaseOffset * 0.8);
-    const depthFactor = (depthCycle + 1) * 0.5;
 
-    const baseEnvelope = smoothstep(0.04, 0.2, scrollProgress) * (1 - smoothstep(0.88, 1, scrollProgress));
-    const motionEnvelope = Math.max(0.22, baseEnvelope) * profile.motionIntensity;
-    const driftX = (Math.sin(phase * 1.05) * 0.16 + pointerState.x * 0.32) * motionEnvelope;
-    const driftY = (Math.cos(phase * 1.22) * 0.11 - pointerState.y * 0.23) * motionEnvelope;
-    const rotXTarget = (Math.sin(phase * 1.2) * 0.22 + (travelProgress - 0.5) * 0.28) * motionEnvelope;
-    const rotYTarget = (Math.cos(phase * 0.9) * 0.26 + pointerState.x * 0.24) * motionEnvelope;
-    const rotZTarget = (Math.sin(phase * 1.6) * 0.3 + (travelProgress - 0.5) * 0.5) * motionEnvelope;
+    // Create varying depths dynamically
+    const baseDepth = Math.sin(scrollProgress * Math.PI * 3.4 + card.phaseOffset * 1.2);
 
-    const scaleTarget = MathUtils.lerp(0.72, 1.28 / profile.weight, depthFactor);
-    const depthTarget = MathUtils.lerp(-2.3 * profile.weight, 1.25 / profile.weight, depthFactor);
+    // Explicit scroll-scrubbable rotations from our pattern (locks forward at extremes)
+    const scrollRotX = travelProgress * spinPattern.x;
+    const scrollRotY = travelProgress * spinPattern.y;
+    const scrollRotZ = travelProgress * spinPattern.z;
 
-    group.position.x = MathUtils.damp(group.position.x, path.x + driftX, 5, delta);
-    group.position.y = MathUtils.damp(group.position.y, path.y + driftY, 5, delta);
-    group.position.z = MathUtils.damp(group.position.z, depthTarget, 4.2, delta);
-    group.rotation.x = MathUtils.damp(group.rotation.x, rotXTarget, 4.5, delta);
-    group.rotation.y = MathUtils.damp(group.rotation.y, rotYTarget, 4.5, delta);
-    group.rotation.z = MathUtils.damp(group.rotation.z, rotZTarget, 4.5, delta);
+    // Self-rotation (continuous spinning idly) + responsive sway
+    // Presence Envelope: Keep in "moving path mode" until 0.5% and 99.5% extremes
+    const baseEnvelope = smoothstep(0.005, 0.05, scrollProgress) * (1 - smoothstep(0.95, 0.995, scrollProgress));
+    const motionEnvelope = Math.max(0.2, baseEnvelope) * profile.motionIntensity;
+
+    // Fade away the continuous / random spin at the extreme ends so they sit perfectly upright
+    const idleRotFactor = smoothstep(0.01, 0.08, scrollProgress) * (1 - smoothstep(0.92, 0.99, scrollProgress));
+    const selfRotX = (Math.sin(phase * 1.5) * 1.4 + (travelProgress - 0.5) * 0.28) * motionEnvelope * idleRotFactor;
+    const selfRotY = (Math.cos(phase * 1.2) * 1.6 + pointerState.x * 0.4) * motionEnvelope * idleRotFactor;
+    const selfRotZ = (Math.sin(phase * 1.8) * 1.2) * motionEnvelope * idleRotFactor;
+
+    // Final rotations = Scroll Scrub Math + Continuous Idle Spin Matrix
+    const finalRotXTarget = scrollRotX + selfRotX;
+    const finalRotYTarget = scrollRotY + selfRotY;
+    const finalRotZTarget = scrollRotZ + selfRotZ;
+
+    const driftX = (Math.sin(phase * 1.05) * 0.18 + pointerState.x * 0.32) * motionEnvelope;
+    const driftY = (Math.cos(phase * 1.22) * 0.14 - pointerState.y * 0.23) * motionEnvelope;
+    const driftZ = (Math.sin(phase * 0.9) * 0.1) * motionEnvelope;
+
+    // Final XYZ Position = Home (Start/End) -> Path -> Drift
+    const homeTarget = scrollProgress < 0.5 ? startPos : endPos;
+    const targetX = MathUtils.lerp(homeTarget.x, path.x, baseEnvelope) + driftX;
+    const targetY = MathUtils.lerp(homeTarget.y, path.y, baseEnvelope) + driftY;
+    const targetZ = MathUtils.lerp(homeTarget.z, path.z, baseEnvelope) + driftZ;
+
+    // Use higher damp factor (6.5) for more responsive scroll tracking
+    group.position.x = MathUtils.damp(group.position.x, targetX, 6.5, delta);
+    group.position.y = MathUtils.damp(group.position.y, targetY, 6.5, delta);
+    group.position.z = MathUtils.damp(group.position.z, targetZ, 6.5, delta);
+    group.rotation.x = MathUtils.damp(group.rotation.x, finalRotXTarget, 5.5, delta);
+    group.rotation.y = MathUtils.damp(group.rotation.y, finalRotYTarget, 5.5, delta);
+    group.rotation.z = MathUtils.damp(group.rotation.z, finalRotZTarget, 5.5, delta);
+
+    // Scale: micro-sized professional background cards (0.32 - 0.58 approx)
+    const scaleFactor = (baseDepth + 1) * 0.5;
+    const scaleTarget = MathUtils.lerp(0.32, 0.58 / profile.weight, scaleFactor);
     group.scale.x = MathUtils.damp(group.scale.x, scaleTarget, 5, delta);
     group.scale.y = MathUtils.damp(group.scale.y, scaleTarget, 5, delta);
     group.scale.z = MathUtils.damp(group.scale.z, 1, 5, delta);
 
     imageMesh.rotation.z = MathUtils.damp(imageMesh.rotation.z, Math.sin(phase * 0.8) * 0.03 * motionEnvelope, 4, delta);
     borderMesh.rotation.z = MathUtils.damp(borderMesh.rotation.z, Math.sin(phase * 0.92) * 0.035 * motionEnvelope, 4, delta);
-    const pulse = 0.32 + Math.sin(phase * 2.1) * 0.1 + depthFactor * 0.24;
+    const pulse = 0.32 + Math.sin(phase * 2.1) * 0.1 + scaleFactor * 0.24;
     const runWave = (Math.sin(phase * (2.2 + profile.motionIntensity * 0.5) + index * 0.8) + 1) * 0.5;
     const secondaryWave = (Math.cos(phase * (1.4 + profile.motionIntensity * 0.35) + card.phaseOffset) + 1) * 0.5;
 
@@ -474,30 +613,26 @@ function CardMesh({ card, index, scrollProgress, pointerState, palette, profile,
   return (
     <group ref={groupRef}>
       <mesh ref={glowRef} geometry={glowGeometry} position={[0, 0, -0.08]}>
-        <meshPhysicalMaterial
-          ref={glowMaterialRef}
+        <meshBasicMaterial
+          ref={glowMaterialRef as any}
           color="#8ff3ff"
           transparent
-          opacity={0.1}
-          transmission={0.7}
-          roughness={0.22}
-          metalness={0.16}
+          opacity={0.15}
           depthWrite={false}
           blending={AdditiveBlending}
         />
       </mesh>
 
       <mesh ref={borderRef} geometry={borderGeometry} position={[0, 0, 0.012]}>
-        <meshPhysicalMaterial
-          ref={borderMaterialRef}
+        <meshStandardMaterial
+          ref={borderMaterialRef as any}
           color={palette.foreground}
           emissive="#8ff3ff"
-          emissiveIntensity={1.04}
-          transmission={0.54}
+          emissiveIntensity={1.2}
           roughness={0.12}
-          metalness={0.68}
+          metalness={0.88}
           transparent
-          opacity={0.24}
+          opacity={0.6}
         />
       </mesh>
 
@@ -508,26 +643,22 @@ function CardMesh({ card, index, scrollProgress, pointerState, palette, profile,
         />
       </mesh>
 
-      <mesh geometry={imageGeometry} position={[0, 0, 0.017]}>
-        <meshPhysicalMaterial
-          color="#ff9cde"
-          transparent
-          opacity={0.08}
-          transmission={0.22}
-          roughness={0.03}
-          metalness={0.32}
-          iridescence={1}
-          iridescenceIOR={1.2}
+      {/* Back face mesh (flipped 180 deg) */}
+      <mesh geometry={imageGeometry} position={[0, 0, -0.012]} rotation={[0, Math.PI, 0]}>
+        <meshBasicMaterial
+          map={backTexture}
+          toneMapped={false}
         />
       </mesh>
 
-      <Line points={borderPoints} color={palette.foreground} lineWidth={1.02} transparent opacity={0.24} />
+      {/* Iridescent physical layer removed for rendering performance */}
+      <Line points={borderPoints} color={palette.foreground} lineWidth={1.6} transparent opacity={0.34} />
       <Line
         points={borderPoints}
         color="#8ff3ff"
-        lineWidth={0.74}
+        lineWidth={1.1}
         transparent
-        opacity={0.42}
+        opacity={0.56}
       />
 
       <TrailParticles
@@ -603,17 +734,26 @@ export function FloatingCardScene({ cards, scrollProgress, pointerState }: Float
   }, []);
 
   return (
-    <div className="floating-webgl-layer" aria-hidden="true">
+    <div className="floating-webgl-layer" style={{
+      position: 'fixed',
+      inset: 0,
+      pointerEvents: 'none',
+      zIndex: 3,
+      opacity: 1
+    }} aria-hidden="true">
       <Canvas
-        dpr={[1, 1.5]}
-        gl={{ antialias: true, alpha: true }}
-        camera={{ position: [0, 0, 7.5], fov: 42 }}
+        dpr={[1, 2]}
+        gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+        camera={{ position: [0, 0, 13], fov: 50 }}
       >
-        <ambientLight intensity={0.62} color="#d8ecff" />
-        <directionalLight position={[4, 5, 3]} intensity={1.25} color="#a6ddff" />
-        <pointLight position={[-4, -3, 4]} intensity={0.7} color="#b08dff" />
+        <ambientLight intensity={0.74} color="#d8ecff" />
+        <directionalLight position={[5, 6, 4]} intensity={1.55} color="#a6ddff" />
+        <pointLight position={[-4, -3, 5]} intensity={0.9} color="#b08dff" />
+        <pointLight position={[3, 4, -2]} intensity={0.5} color="#90f7ce" />
 
-        {cards.slice(0, 2).map((card, index) => (
+        <RailwayLines palette={themeConfig.palette} grade={themeConfig.grade!} pointerState={pointerState} />
+
+        {cards.slice(0, 4).map((card, index) => (
           <CardMesh
             key={card.id}
             card={card}

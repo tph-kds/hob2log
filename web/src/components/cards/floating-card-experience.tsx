@@ -8,6 +8,7 @@ interface FloatingCardInput {
   id: string;
   title: string;
   imageUrl: string;
+  backImageUrl: string;
   phaseOffset: number;
 }
 

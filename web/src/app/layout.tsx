@@ -5,6 +5,7 @@ import { ThemeSwitcher } from "@/components/layout/theme-switcher";
 import { PageTransition } from "@/components/layout/page-transition";
 import { ScrollProgressRing } from "@/components/layout/scroll-progress-ring";
 import { SiteHeader } from "@/components/layout/site-header";
+import { MusicProvider } from "@/components/music/music-provider";
 import "./globals.css";
 
 const headingFont = Space_Grotesk({
@@ -68,11 +69,13 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
       </head>
       <body suppressHydrationWarning className="min-h-full flex flex-col">
-        <ProjectLogo />
-        <SiteHeader />
-        <PageTransition>{children}</PageTransition>
-        <ScrollProgressRing />
-        <ThemeSwitcher />
+        <MusicProvider>
+          <ProjectLogo />
+          <SiteHeader />
+          <PageTransition>{children}</PageTransition>
+          <ScrollProgressRing />
+          <ThemeSwitcher />
+        </MusicProvider>
       </body>
     </html>
   );

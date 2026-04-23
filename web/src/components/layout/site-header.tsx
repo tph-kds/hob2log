@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useMusicPlayer } from "@/components/music/music-provider";
 
 const links = [
   { href: "/", label: "Home" },
@@ -29,6 +30,7 @@ export function SiteHeader() {
   const [isDesktop, setIsDesktop] = useState(false);
   const prefersReducedMotion = useReducedMotion();
   const pathname = usePathname();
+  const { isPanelVisible, togglePanelVisible } = useMusicPlayer();
 
   // ── 1. Responsive breakpoint listener ──────────────────────────────────────
   useEffect(() => {
@@ -90,7 +92,7 @@ export function SiteHeader() {
       <div className="site-nav-panel site-nav-separated mx-auto w-fit rounded-2xl px-4 py-3 md:px-5">
 
         {/* ── Desktop nav ─────────────────────────────────────────────── */}
-        <div className="hidden md:flex items-center justify-center gap-4">
+        <div className={`hidden md:flex ${useVerticalDock ? "site-header-desktop-vertical" : "items-center justify-center gap-3"}`}>
           <nav
             className={`flex md:pr-1 ${
               useVerticalDock
@@ -118,6 +120,22 @@ export function SiteHeader() {
               </div>
             ))}
           </nav>
+          <div className={`site-header-actions ${useVerticalDock ? "site-header-actions-vertical" : ""}`}>
+            <button
+              type="button"
+              className={`site-header-icon-button ${isPanelVisible ? "is-active" : ""}`}
+              aria-label={isPanelVisible ? "Hide music panel" : "Show music panel"}
+              aria-pressed={isPanelVisible}
+              onClick={togglePanelVisible}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="site-header-icon">
+                <path
+                  d="M16.5 3v10.05a2.75 2.75 0 1 1-1.5-2.44V6.04l-6 1.35v7.66a2.75 2.75 0 1 1-1.5-2.44V5.18a1 1 0 0 1 .78-.98l7.5-1.7A.9.9 0 0 1 16.5 3Z"
+                  fill="currentColor"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* ── Mobile nav (always horizontal) ──────────────────────────── */}
@@ -131,6 +149,20 @@ export function SiteHeader() {
               {link.label}
             </Link>
           ))}
+          <button
+            type="button"
+            className={`site-header-icon-button site-header-icon-button-compact ${isPanelVisible ? "is-active" : ""}`}
+            aria-label={isPanelVisible ? "Hide music panel" : "Show music panel"}
+            aria-pressed={isPanelVisible}
+            onClick={togglePanelVisible}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="site-header-icon">
+              <path
+                d="M16.5 3v10.05a2.75 2.75 0 1 1-1.5-2.44V6.04l-6 1.35v7.66a2.75 2.75 0 1 1-1.5-2.44V5.18a1 1 0 0 1 .78-.98l7.5-1.7A.9.9 0 0 1 16.5 3Z"
+                fill="currentColor"
+              />
+            </svg>
+          </button>
         </nav>
 
       </div>

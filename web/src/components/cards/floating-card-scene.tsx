@@ -2,18 +2,16 @@
 
 import { Line } from "@react-three/drei";
 import { Canvas, useFrame, useLoader } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import {
   AdditiveBlending,
   BufferAttribute,
   ClampToEdgeWrapping,
-  Color,
   Group,
   LinearFilter,
   LinearMipmapLinearFilter,
   MathUtils,
   Mesh,
-  MeshPhysicalMaterial,
   PointsMaterial,
   Shape,
   ShapeGeometry,
@@ -31,11 +29,11 @@ interface FloatingCardInput {
 
 interface FloatingCardSceneProps {
   cards: FloatingCardInput[];
-  scrollProgress: number;
-  pointerState: {
+  scrollProgressRef: MutableRefObject<number>;
+  pointerRef: MutableRefObject<{
     x: number;
     y: number;
-  };
+  }>;
 }
 
 interface ThemePalette {
@@ -73,12 +71,11 @@ interface ThemeVisualConfig {
 interface CardMeshProps {
   card: FloatingCardInput;
   index: number;
-  scrollProgress: number;
-  pointerState: {
+  scrollProgressRef: MutableRefObject<number>;
+  pointerRef: MutableRefObject<{
     x: number;
     y: number;
-  };
-  palette: ThemePalette;
+  }>;
   profile: ThemeMotionProfile;
   grade?: ThemeColorGrade;
 }
@@ -87,13 +84,13 @@ interface TrailParticlesProps {
   count: number;
   phaseOffset: number;
   color: string;
-  pointerState: {
+  pointerRef: MutableRefObject<{
     x: number;
     y: number;
-  };
+  }>;
   profile: ThemeMotionProfile;
   layerOffset: number;
-  scrollProgress: number;
+  scrollProgressRef: MutableRefObject<number>;
   lowOpacity: number;
   highOpacity: number;
 }
@@ -189,10 +186,6 @@ function createRoundedRectGeometry(width: number, height: number, radius: number
   return new ShapeGeometry(createRoundedRectShape(width, height, radius));
 }
 
-function createRoundedRectLinePoints(width: number, height: number, radius: number, segments = 40) {
-  return createRoundedRectShape(width, height, radius).getSpacedPoints(segments);
-}
-
 function normalizeGeometryUv(geometry: ShapeGeometry) {
   geometry.computeBoundingBox();
 
@@ -222,20 +215,6 @@ function normalizeGeometryUv(geometry: ShapeGeometry) {
 
   geometry.setAttribute("uv", new BufferAttribute(uv, 2));
   return geometry;
-}
-
-function createRoundedRectBorderGeometry(
-  outerWidth: number,
-  outerHeight: number,
-  innerWidth: number,
-  innerHeight: number,
-  outerRadius: number,
-  innerRadius: number
-) {
-  const outer = createRoundedRectShape(outerWidth, outerHeight, outerRadius);
-  const inner = createRoundedRectShape(innerWidth, innerHeight, innerRadius);
-  outer.holes.push(inner);
-  return new ShapeGeometry(outer);
 }
 
 function getTextureAspect(texture: { image?: { width?: number; height?: number } }, fallbackAspect: number) {
@@ -304,10 +283,10 @@ function normalizeCardImageUrl(url: string) {
   }
 }
 
-function RailwayLines({ grade, pointerState }: { palette: ThemePalette, grade: ThemeColorGrade, pointerState: { x: number, y: number } }) {
+function RailwayLines({ grade, pointerRef }: { palette: ThemePalette, grade: ThemeColorGrade, pointerRef: MutableRefObject<{ x: number; y: number }> }) {
   const railPoints = useMemo(() => {
     return [0, 1, 2, 3].map(idx => {
-      const pts = [];
+      const pts: [number, number, number][] = [];
       for (let i = 0; i <= 60; i++) {
         const p = getPath(idx, i / 60);
         pts.push([p.x, p.y, p.z - 0.15]);
@@ -321,6 +300,7 @@ function RailwayLines({ grade, pointerState }: { palette: ThemePalette, grade: T
   useFrame((state) => {
     if (!railRef.current) return;
     const elapsed = state.clock.getElapsedTime();
+    const pointerState = pointerRef.current;
     railRef.current.children.forEach((child, i) => {
       child.position.x = pointerState.x * 0.08 * Math.sin(elapsed + i);
       child.position.y = -pointerState.y * 0.05 * Math.cos(elapsed * 0.8 + i);
@@ -332,7 +312,7 @@ function RailwayLines({ grade, pointerState }: { palette: ThemePalette, grade: T
       {railPoints.map((pts, i) => (
         <group key={i}>
           <Line
-            points={pts as any}
+            points={pts}
             color={grade.trailPrimary}
             lineWidth={1.0}
             transparent
@@ -340,7 +320,7 @@ function RailwayLines({ grade, pointerState }: { palette: ThemePalette, grade: T
             blending={AdditiveBlending}
           />
           <Line
-            points={pts as any}
+            points={pts}
             color={grade.trailSecondary}
             lineWidth={2.8}
             transparent
@@ -353,7 +333,7 @@ function RailwayLines({ grade, pointerState }: { palette: ThemePalette, grade: T
   );
 }
 
-function TrailParticles({ count, phaseOffset, color, pointerState, profile, layerOffset, scrollProgress, lowOpacity, highOpacity }: TrailParticlesProps) {
+function TrailParticles({ count, phaseOffset, color, pointerRef, profile, layerOffset, scrollProgressRef, lowOpacity, highOpacity }: TrailParticlesProps) {
   const attributeRef = useRef<BufferAttribute>(null);
   const materialRef = useRef<PointsMaterial>(null);
   const positions = useMemo(() => new Float32Array(count * 3), [count]);
@@ -380,6 +360,8 @@ function TrailParticles({ count, phaseOffset, color, pointerState, profile, laye
 
     const array = attribute.array as Float32Array;
     const elapsed = state.clock.getElapsedTime();
+    const pointerState = pointerRef.current;
+    const scrollProgress = scrollProgressRef.current;
 
     for (let index = 0; index < count; index += 1) {
       const seed = seeds[index];
@@ -420,18 +402,13 @@ function TrailParticles({ count, phaseOffset, color, pointerState, profile, laye
   );
 }
 
-function CardMesh({ card, index, scrollProgress, pointerState, palette, profile, grade }: CardMeshProps) {
+function CardMesh({ card, index, scrollProgressRef, pointerRef, profile, grade }: CardMeshProps) {
   const resolvedGrade = grade ?? THEME_COLOR_GRADES.ocean;
   const groupRef = useRef<Group>(null);
   const imageRef = useRef<Mesh>(null);
-  const borderRef = useRef<Mesh>(null);
-  const glowRef = useRef<Mesh>(null);
-  const borderMaterialRef = useRef<MeshPhysicalMaterial>(null);
-  const glowMaterialRef = useRef<MeshPhysicalMaterial>(null);
   const cardImageUrl = useMemo(() => normalizeCardImageUrl(card.imageUrl), [card.imageUrl]);
-  const backImageUrl = useMemo(() => normalizeCardImageUrl(card.backImageUrl), [card.backImageUrl]);
 
-  const [rawTexture, rawBackTexture] = useLoader(TextureLoader, [cardImageUrl, backImageUrl], (loader) => {
+  const rawTexture = useLoader(TextureLoader, cardImageUrl, (loader) => {
     loader.setCrossOrigin("anonymous");
   });
   const cardWidth = 1.516;
@@ -452,50 +429,16 @@ function CardMesh({ card, index, scrollProgress, pointerState, palette, profile,
     return nextTexture;
   }, [rawTexture, cardAspect]);
 
-  const backTexture = useMemo(() => {
-    const nextTexture = rawBackTexture.clone();
-    nextTexture.colorSpace = SRGBColorSpace;
-    nextTexture.wrapS = ClampToEdgeWrapping;
-    nextTexture.wrapT = ClampToEdgeWrapping;
-    nextTexture.minFilter = LinearMipmapLinearFilter;
-    nextTexture.magFilter = LinearFilter;
-    nextTexture.anisotropy = 8;
-    const imageAspect = getTextureAspect(nextTexture, cardAspect);
-    applyCoverUv(nextTexture, imageAspect, cardAspect);
-    nextTexture.needsUpdate = true;
-    return nextTexture;
-  }, [rawBackTexture, cardAspect]);
-
   useEffect(() => {
     return () => {
       texture.dispose();
-      backTexture.dispose();
     };
-  }, [texture, backTexture]);
+  }, [texture]);
 
   const imageGeometry = useMemo(
     () => normalizeGeometryUv(createRoundedRectGeometry(cardWidth, cardHeight, 0.126)),
     [cardHeight, cardWidth]
   );
-  const borderGeometry = useMemo(
-    () => createRoundedRectBorderGeometry(1.53, 2.13, cardWidth, cardHeight, 0.15, 0.126),
-    [cardHeight, cardWidth]
-  );
-  const glowGeometry = useMemo(
-    () => createRoundedRectGeometry(1.545, 2.145, 0.154),
-    []
-  );
-
-  const accentColor = useMemo(() => new Color("#8ff3ff"), []);
-  const accentColorTwo = useMemo(() => new Color("#ff9cde"), []);
-  const foregroundColor = useMemo(() => new Color(palette.foreground), [palette.foreground]);
-  const edgeColorCache = useMemo(() => new Color(), []);
-  const glowColorCache = useMemo(() => new Color(), []);
-  const borderColorCache = useMemo(() => new Color(), []);
-  const edgeTintColor = useMemo(() => new Color("#b6b1ff"), []);
-
-  const borderPoints = useMemo(() => createRoundedRectLinePoints(1.53, 2.13, 0.15, 56), []);
-
   // Must be multiples of PI * 2 so they guarantee facing forward exactly at scroll extremeties (0 and 1)
   const SPIN_PATTERNS = [
     { x: 0, y: -Math.PI * 2, z: 0 },                        // Left spin
@@ -525,14 +468,13 @@ function CardMesh({ card, index, scrollProgress, pointerState, palette, profile,
   useFrame((state, delta) => {
     const group = groupRef.current;
     const imageMesh = imageRef.current;
-    const borderMesh = borderRef.current;
-    const glowMesh = glowRef.current;
-    const borderMaterial = borderMaterialRef.current;
-    const glowMaterial = glowMaterialRef.current;
 
-    if (!group || !imageMesh || !borderMesh || !glowMesh || !borderMaterial || !glowMaterial) {
+    if (!group || !imageMesh) {
       return;
     }
+
+    const pointerState = pointerRef.current;
+    const scrollProgress = scrollProgressRef.current;
 
     // Staggered travel progress for continuous presence
     // Slightly reduced stagger for tighter group feel during fast scrolls
@@ -577,13 +519,12 @@ function CardMesh({ card, index, scrollProgress, pointerState, palette, profile,
     const targetY = MathUtils.lerp(homeTarget.y, path.y, baseEnvelope) + driftY;
     const targetZ = MathUtils.lerp(homeTarget.z, path.z, baseEnvelope) + driftZ;
 
-    // Use higher damp factor (6.5) for more responsive scroll tracking
-    group.position.x = MathUtils.damp(group.position.x, targetX, 6.5, delta);
-    group.position.y = MathUtils.damp(group.position.y, targetY, 6.5, delta);
-    group.position.z = MathUtils.damp(group.position.z, targetZ, 6.5, delta);
-    group.rotation.x = MathUtils.damp(group.rotation.x, finalRotXTarget, 5.5, delta);
-    group.rotation.y = MathUtils.damp(group.rotation.y, finalRotYTarget, 5.5, delta);
-    group.rotation.z = MathUtils.damp(group.rotation.z, finalRotZTarget, 5.5, delta);
+    group.position.x = MathUtils.damp(group.position.x, targetX, 11, delta);
+    group.position.y = MathUtils.damp(group.position.y, targetY, 11, delta);
+    group.position.z = MathUtils.damp(group.position.z, targetZ, 11, delta);
+    group.rotation.x = MathUtils.damp(group.rotation.x, finalRotXTarget, 9.5, delta);
+    group.rotation.y = MathUtils.damp(group.rotation.y, finalRotYTarget, 9.5, delta);
+    group.rotation.z = MathUtils.damp(group.rotation.z, finalRotZTarget, 9.5, delta);
 
     // Scale: micro-sized professional background cards (0.32 - 0.58 approx)
     const scaleFactor = (baseDepth + 1) * 0.5;
@@ -593,49 +534,10 @@ function CardMesh({ card, index, scrollProgress, pointerState, palette, profile,
     group.scale.z = MathUtils.damp(group.scale.z, 1, 5, delta);
 
     imageMesh.rotation.z = MathUtils.damp(imageMesh.rotation.z, Math.sin(phase * 0.8) * 0.03 * motionEnvelope, 4, delta);
-    borderMesh.rotation.z = MathUtils.damp(borderMesh.rotation.z, Math.sin(phase * 0.92) * 0.035 * motionEnvelope, 4, delta);
-    const pulse = 0.32 + Math.sin(phase * 2.1) * 0.1 + scaleFactor * 0.24;
-    const runWave = (Math.sin(phase * (2.2 + profile.motionIntensity * 0.5) + index * 0.8) + 1) * 0.5;
-    const secondaryWave = (Math.cos(phase * (1.4 + profile.motionIntensity * 0.35) + card.phaseOffset) + 1) * 0.5;
-
-    edgeColorCache.copy(accentColor).lerp(edgeTintColor, runWave * 0.6).lerp(accentColorTwo, runWave * 0.4);
-    glowColorCache.copy(accentColor).lerp(accentColorTwo, secondaryWave);
-    borderColorCache.copy(foregroundColor).lerp(edgeColorCache, 0.26);
-
-    borderMaterial.color.copy(borderColorCache);
-    borderMaterial.emissive.copy(edgeColorCache);
-    borderMaterial.emissiveIntensity = MathUtils.lerp(0.34, 0.68, runWave);
-
-    glowMaterial.color.copy(glowColorCache);
-    glowMaterial.opacity = pulse;
   });
 
   return (
     <group ref={groupRef}>
-      <mesh ref={glowRef} geometry={glowGeometry} position={[0, 0, -0.08]}>
-        <meshBasicMaterial
-          ref={glowMaterialRef as any}
-          color="#8ff3ff"
-          transparent
-          opacity={0.15}
-          depthWrite={false}
-          blending={AdditiveBlending}
-        />
-      </mesh>
-
-      <mesh ref={borderRef} geometry={borderGeometry} position={[0, 0, 0.012]}>
-        <meshStandardMaterial
-          ref={borderMaterialRef as any}
-          color={palette.foreground}
-          emissive="#8ff3ff"
-          emissiveIntensity={1.2}
-          roughness={0.12}
-          metalness={0.88}
-          transparent
-          opacity={0.6}
-        />
-      </mesh>
-
       <mesh ref={imageRef} geometry={imageGeometry} position={[0, 0, 0.014]}>
         <meshBasicMaterial
           map={texture}
@@ -643,32 +545,14 @@ function CardMesh({ card, index, scrollProgress, pointerState, palette, profile,
         />
       </mesh>
 
-      {/* Back face mesh (flipped 180 deg) */}
-      <mesh geometry={imageGeometry} position={[0, 0, -0.012]} rotation={[0, Math.PI, 0]}>
-        <meshBasicMaterial
-          map={backTexture}
-          toneMapped={false}
-        />
-      </mesh>
-
-      {/* Iridescent physical layer removed for rendering performance */}
-      <Line points={borderPoints} color={palette.foreground} lineWidth={1.6} transparent opacity={0.34} />
-      <Line
-        points={borderPoints}
-        color="#8ff3ff"
-        lineWidth={1.1}
-        transparent
-        opacity={0.56}
-      />
-
       <TrailParticles
         count={profile.particleCount}
         phaseOffset={card.phaseOffset}
         color="#8ff3ff"
-        pointerState={pointerState}
+        pointerRef={pointerRef}
         profile={profile}
         layerOffset={index * 0.42}
-        scrollProgress={scrollProgress}
+        scrollProgressRef={scrollProgressRef}
         lowOpacity={resolvedGrade.trailOpacityLow}
         highOpacity={resolvedGrade.trailOpacityHigh}
       />
@@ -676,10 +560,10 @@ function CardMesh({ card, index, scrollProgress, pointerState, palette, profile,
         count={Math.max(10, Math.round(profile.particleCount * 0.56))}
         phaseOffset={card.phaseOffset + 1.2}
         color="#ff9cde"
-        pointerState={pointerState}
+        pointerRef={pointerRef}
         profile={profile}
         layerOffset={index * 0.28 + 0.64}
-        scrollProgress={scrollProgress}
+        scrollProgressRef={scrollProgressRef}
         lowOpacity={resolvedGrade.trailOpacityLow * 0.9}
         highOpacity={resolvedGrade.trailOpacityHigh * 0.82}
       />
@@ -714,7 +598,7 @@ function readThemeVisualConfig(): ThemeVisualConfig {
   };
 }
 
-export function FloatingCardScene({ cards, scrollProgress, pointerState }: FloatingCardSceneProps) {
+export function FloatingCardScene({ cards, scrollProgressRef, pointerRef }: FloatingCardSceneProps) {
   const [themeConfig, setThemeConfig] = useState<ThemeVisualConfig>(readThemeVisualConfig);
 
   useEffect(() => {
@@ -742,8 +626,8 @@ export function FloatingCardScene({ cards, scrollProgress, pointerState }: Float
       opacity: 1
     }} aria-hidden="true">
       <Canvas
-        dpr={[1, 2]}
-        gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+        dpr={[1, 1.5]}
+        gl={{ antialias: false, alpha: true, powerPreference: "high-performance" }}
         camera={{ position: [0, 0, 13], fov: 50 }}
       >
         <ambientLight intensity={0.74} color="#d8ecff" />
@@ -751,16 +635,15 @@ export function FloatingCardScene({ cards, scrollProgress, pointerState }: Float
         <pointLight position={[-4, -3, 5]} intensity={0.9} color="#b08dff" />
         <pointLight position={[3, 4, -2]} intensity={0.5} color="#90f7ce" />
 
-        <RailwayLines palette={themeConfig.palette} grade={themeConfig.grade!} pointerState={pointerState} />
+        <RailwayLines palette={themeConfig.palette} grade={themeConfig.grade!} pointerRef={pointerRef} />
 
         {cards.slice(0, 4).map((card, index) => (
           <CardMesh
             key={card.id}
             card={card}
             index={index}
-            scrollProgress={scrollProgress}
-            pointerState={pointerState}
-            palette={themeConfig.palette}
+            scrollProgressRef={scrollProgressRef}
+            pointerRef={pointerRef}
             profile={themeConfig.profile}
             grade={themeConfig.grade}
           />

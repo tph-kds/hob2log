@@ -55,7 +55,6 @@ export function HeroAnimatedCopy({
   const titleRef = useRef<HTMLHeadingElement | null>(null);
   const [roleIndex, setRoleIndex] = useState(0);
   const [isTitleHovered, setIsTitleHovered] = useState(false);
-  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [effectMode, setEffectMode] = useState<EffectMode>("all");
   const prefersReducedMotion = useReducedMotion();
 
@@ -102,7 +101,6 @@ export function HeroAnimatedCopy({
     const localY = event.clientY - rect.top;
     target.style.setProperty("--title-cursor-x", `${localX}px`);
     target.style.setProperty("--title-cursor-y", `${localY}px`);
-    setCursorPos({ x: localX, y: localY });
     onTitlePointerMove?.(event);
   }
 
@@ -113,7 +111,6 @@ export function HeroAnimatedCopy({
     const localY = event.clientY - rect.top;
     target.style.setProperty("--title-cursor-x", `${localX}px`);
     target.style.setProperty("--title-cursor-y", `${localY}px`);
-    setCursorPos({ x: localX, y: localY });
     setIsTitleHovered(true);
     onTitlePointerEnter?.();
   }
@@ -141,8 +138,6 @@ export function HeroAnimatedCopy({
         {!prefersReducedMotion && (
           <ParticleSmokeCanvas
             targetRef={titleRef}
-            cursorX={cursorPos.x}
-            cursorY={cursorPos.y}
             radius={110}
             isActive={isTitleHovered}
             mode={effectMode}

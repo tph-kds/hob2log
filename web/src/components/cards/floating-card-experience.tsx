@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FloatingCardField } from "@/components/cards/floating-card-field";
 import { FloatingCardScene } from "@/components/cards/floating-card-scene";
 
@@ -49,8 +49,9 @@ function clamp(value: number, min: number, max: number) {
 
 export function FloatingCardExperience({ cards }: FloatingCardExperienceProps) {
   const [mode, setMode] = useState<RenderMode>("loading");
-  const [scrollProgress, setScrollProgress] = useState(0);
-  const [pointerState, setPointerState] = useState<PointerState>({ x: 0, y: 0 });
+  const [fallbackPointerState, setFallbackPointerState] = useState<PointerState>({ x: 0, y: 0 });
+  const pointerRef = useRef<PointerState>({ x: 0, y: 0 });
+  const scrollProgressRef = useRef(0);
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
@@ -93,7 +94,7 @@ export function FloatingCardExperience({ cards }: FloatingCardExperienceProps) {
 
       window.requestAnimationFrame(() => {
         const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-        setScrollProgress(clamp(window.scrollY / maxScroll, 0, 1));
+        scrollProgressRef.current = clamp(window.scrollY / maxScroll, 0, 1);
         ticking = false;
       });
     }
@@ -110,11 +111,21 @@ export function FloatingCardExperience({ cards }: FloatingCardExperienceProps) {
     function onPointerMove(event: PointerEvent) {
       const x = clamp(event.clientX / window.innerWidth, 0, 1) * 2 - 1;
       const y = clamp(event.clientY / window.innerHeight, 0, 1) * 2 - 1;
-      setPointerState({ x, y });
+      pointerRef.current.x = x;
+      pointerRef.current.y = y;
+
+      if (mode !== "webgl") {
+        setFallbackPointerState({ x, y });
+      }
     }
 
     function onPointerLeave() {
-      setPointerState({ x: 0, y: 0 });
+      pointerRef.current.x = 0;
+      pointerRef.current.y = 0;
+
+      if (mode !== "webgl") {
+        setFallbackPointerState({ x: 0, y: 0 });
+      }
     }
 
     window.addEventListener("pointermove", onPointerMove, { passive: true });
@@ -124,14 +135,14 @@ export function FloatingCardExperience({ cards }: FloatingCardExperienceProps) {
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerleave", onPointerLeave);
     };
-  }, []);
+  }, [mode]);
 
   if (mode === "webgl") {
-    return <FloatingCardScene cards={cards} scrollProgress={scrollProgress} pointerState={pointerState} />;
+    return <FloatingCardScene cards={cards} scrollProgressRef={scrollProgressRef} pointerRef={pointerRef} />;
   }
 
   if (mode === "fallback") {
-    return <FloatingCardField cards={cards} pointerState={pointerState} />;
+    return <FloatingCardField cards={cards} pointerState={fallbackPointerState} />;
   }
 
   return null;

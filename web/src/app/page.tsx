@@ -101,7 +101,7 @@ export default function Home() {
   ];
 
   return (
-    <div className="page-shell">
+    <div className="page-shell page-shell-no-blur">
       <CardTopicWrapper topics={topics} />
 
       <BlogLandingHero ctaHref="#home-main" ctaLabel="Enter Workspace" scrollHint="Scroll down for latest notes" />

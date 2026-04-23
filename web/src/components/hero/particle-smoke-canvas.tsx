@@ -6,8 +6,6 @@ export type EffectMode = "smoke" | "spark" | "ember" | "frost" | "all";
 
 interface ParticleSmokeCanvasProps {
   targetRef: RefObject<HTMLElement | null>;
-  cursorX: number;
-  cursorY: number;
   radius?: number;
   isActive: boolean;
   mode?: EffectMode;
@@ -211,8 +209,6 @@ function drawParticle(ctx: CanvasRenderingContext2D, p: Particle) {
 
 export function ParticleSmokeCanvas({
   targetRef,
-  cursorX,
-  cursorY,
   radius = 110,
   isActive,
   mode = "all",
@@ -221,13 +217,31 @@ export function ParticleSmokeCanvas({
   const particlesRef = useRef<Particle[]>([]);
   const rafRef = useRef<number>(0);
   const activeRef = useRef(isActive);
-  const posRef = useRef({ x: cursorX, y: cursorY });
+  const posRef = useRef({ x: 0, y: 0 });
   const modeRef = useRef(mode);
 
   // Keep refs in sync
   useEffect(() => { activeRef.current = isActive; }, [isActive]);
-  useEffect(() => { posRef.current = { x: cursorX, y: cursorY }; }, [cursorX, cursorY]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
+
+  useEffect(() => {
+    const targetNode = targetRef.current;
+    if (!targetNode) return;
+
+    function updatePosition(event: PointerEvent) {
+      const rect = targetNode.getBoundingClientRect();
+      posRef.current.x = event.clientX - rect.left;
+      posRef.current.y = event.clientY - rect.top;
+    }
+
+    targetNode.addEventListener("pointerenter", updatePosition, { passive: true });
+    targetNode.addEventListener("pointermove", updatePosition, { passive: true });
+
+    return () => {
+      targetNode.removeEventListener("pointerenter", updatePosition);
+      targetNode.removeEventListener("pointermove", updatePosition);
+    };
+  }, [targetRef]);
 
   // Resize canvas to match target
   useEffect(() => {

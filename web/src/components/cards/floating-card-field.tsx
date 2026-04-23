@@ -144,7 +144,6 @@ export function FloatingCardField({ cards, pointerState }: FloatingCardFieldProp
         const rotateY = (Math.cos(time * 1.1 + card.phaseOffset) * 16 + pointerState.x * 10) * motionEnvelope;
         const rotateZ = (Math.sin(time * 1.8 + card.phaseOffset) * 18 + (travelProgress - 0.5) * 34) * motionEnvelope;
         const scale = lerp(0.74, 1.18, depthFactor);
-        const blur = lerp(4.6, 1.2, depthFactor);
         const opacity = lerp(0.22, 0.66, depthFactor);
         const layerIndex = Math.round(10 + depthFactor * 20);
 
@@ -152,7 +151,7 @@ export function FloatingCardField({ cards, pointerState }: FloatingCardFieldProp
           left: `${path.x + driftX}px`,
           top: `${path.y + driftY}px`,
           transform: `translate(-50%, -50%) rotateX(${rotateX}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg) scale(${scale})`,
-          filter: `blur(${blur}px) drop-shadow(0 24px 42px color-mix(in srgb, var(--background) 72%, transparent)) drop-shadow(0 0 20px color-mix(in srgb, var(--accent) 30%, transparent))`,
+          filter: "none",
           opacity,
           zIndex: layerIndex,
         };

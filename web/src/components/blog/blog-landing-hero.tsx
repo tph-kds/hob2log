@@ -41,25 +41,40 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
   const [droplets, setDroplets] = useState<
     Array<{ id: number; x: number; y: number; dx: number; dy: number; size: number; duration: number; delay: number }>
   >([]);
-  const { scrollYProgress } = useScroll();
+  const { scrollYProgress } = useScroll({
+    target: heroRef,
+    offset: ["start start", "end start"],
+  });
 
-  const rotateX = useSpring(rotateXValue, { stiffness: 160, damping: 20, mass: 0.6 });
-  const rotateY = useSpring(rotateYValue, { stiffness: 160, damping: 20, mass: 0.6 });
+  const rotateX = useSpring(rotateXValue, { stiffness: 260, damping: 24, mass: 0.5 });
+  const rotateY = useSpring(rotateYValue, { stiffness: 260, damping: 24, mass: 0.5 });
+  const dnaProgress = useSpring(scrollYProgress, { stiffness: 110, damping: 22, mass: 0.5 });
   const depth = useTransform(rotateY, [-8, 8], [-14, 14]);
-  const cursorX = useSpring(glowX, { stiffness: 180, damping: 24, mass: 0.7 });
-  const cursorY = useSpring(glowY, { stiffness: 180, damping: 24, mass: 0.7 });
+  const cursorX = useSpring(glowX, { stiffness: 360, damping: 28, mass: 0.38 });
+  const cursorY = useSpring(glowY, { stiffness: 360, damping: 28, mass: 0.38 });
   const cursorXPercentValue = useTransform(cursorX, (value) => value * 100);
   const cursorYPercentValue = useTransform(cursorY, (value) => value * 100);
-  const parallaxX = useSpring(shiftX, { stiffness: 120, damping: 18, mass: 0.7 });
-  const parallaxY = useSpring(shiftY, { stiffness: 120, damping: 18, mass: 0.7 });
+  const parallaxX = useSpring(shiftX, { stiffness: 220, damping: 24, mass: 0.55 });
+  const parallaxY = useSpring(shiftY, { stiffness: 220, damping: 24, mass: 0.55 });
   const cursorXPercent = useMotionTemplate`${cursorXPercentValue}%`;
   const cursorYPercent = useMotionTemplate`${cursorYPercentValue}%`;
   const shiftXPx = useMotionTemplate`${parallaxX}px`;
   const shiftYPx = useMotionTemplate`${parallaxY}px`;
-  const dnaRotate = useTransform(scrollYProgress, [0, 0.35, 0.7, 1], [0, 38, 120, 190]);
-  const dnaScale = useTransform(scrollYProgress, [0, 0.3, 0.65, 1], [1, 1.08, 0.96, 0.84]);
-  const dnaY = useTransform(scrollYProgress, [0, 0.45, 1], [0, 36, 94]);
-  const dnaOpacity = useTransform(scrollYProgress, [0, 0.32, 1], [0.95, 0.82, 0.46]);
+  const heroProgress = useTransform(dnaProgress, [0, 1], [0, 1]);
+  const heroGradientShift = useTransform(dnaProgress, [0, 1], ["0%", "100%"]);
+  const dnaRotateY = useTransform(dnaProgress, [0, 0.32, 0.64, 1], [0, 12, 22, 28]);
+  const dnaRotateX = useTransform(dnaProgress, [0, 0.38, 0.74, 1], [0, 10, 20, 24]);
+  const dnaRotateZ = useTransform(dnaProgress, [0, 0.36, 0.68, 1], [0, 28, 72, 92]);
+  const dnaScale = useTransform(dnaProgress, [0, 0.38, 0.7, 1], [1, 1.08, 1.18, 1.05]);
+  const dnaShiftX = useTransform(dnaProgress, [0, 0.3, 0.62, 1], [0, 22, 70, 126]);
+  const dnaX = useTransform([depth, dnaShiftX], ([depthOffset, shiftXOffset]) => depthOffset + shiftXOffset);
+  const dnaTravelY = useTransform(dnaProgress, [0, 0.28, 0.6, 0.82, 1], [0, 40, 210, 376, 520]);
+  const dnaZ = useTransform(dnaProgress, [0, 0.42, 0.74, 1], [0, 64, 168, 94]);
+  const dnaOpacity = useTransform(dnaProgress, [0, 0.35, 0.72, 1], [0.95, 0.9, 0.78, 0.58]);
+  const dnaHue = useTransform(dnaProgress, [0, 1], [0, 38]);
+  const dnaSaturation = useTransform(dnaProgress, [0, 0.7, 1], [1, 1.24, 1.34]);
+  const dnaBrightness = useTransform(dnaProgress, [0, 1], [1, 1.16]);
+  const dnaFilter = useMotionTemplate`hue-rotate(${dnaHue}deg) saturate(${dnaSaturation}) brightness(${dnaBrightness})`;
   const proteinSpread = useTransform(scrollYProgress, [0.16, 0.9], [0, 148]);
   const proteinOpacity = useTransform(scrollYProgress, [0.1, 0.32, 0.9, 1], [0.1, 0.88, 0.42, 0]);
   const proteinSpreadPx = useMotionTemplate`${proteinSpread}px`;
@@ -113,6 +128,14 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
 
     return () => {
       observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    document.body.setAttribute("data-home-no-blur", "true");
+
+    return () => {
+      document.body.removeAttribute("data-home-no-blur");
     };
   }, []);
 
@@ -220,7 +243,7 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
   return (
     <motion.section
       ref={heroRef}
-      className={`blog-landing-hero rounded-3xl overflow-hidden ${isHeroPointerInside ? "is-hero-hover" : ""} ${isTitleFocus ? "is-title-focus" : ""} `}
+      className={`blog-landing-hero rounded-3xl ${isHeroPointerInside ? "is-hero-hover" : ""} ${isTitleFocus ? "is-title-focus" : ""} `}
       onPointerMove={handleHeroPointerMove}
       onPointerLeave={handleHeroPointerLeave}
       initial={prefersReducedMotion ? false : { opacity: 0, y: 16 }}
@@ -233,6 +256,9 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
         "--hero-cursor-y": cursorYPercent,
         "--hero-shift-x": prefersReducedMotion ? "0px" : shiftXPx,
         "--hero-shift-y": prefersReducedMotion ? "0px" : shiftYPx,
+        "--hero-progress": heroProgress,
+        "--hero-gradient-shift": heroGradientShift,
+        "--dna-transfer-progress": heroProgress,
       } as CSSProperties}
     >
       <div className="hero-cursor-orb" aria-hidden="true" />
@@ -242,11 +268,15 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
       <motion.div
         className="blog-landing-dna"
         style={{
-          x: prefersReducedMotion ? 0 : depth,
-          y: prefersReducedMotion ? 0 : dnaY,
-          rotateZ: prefersReducedMotion ? 0 : dnaRotate,
+          x: prefersReducedMotion ? 0 : dnaX,
+          y: prefersReducedMotion ? 0 : dnaTravelY,
+          z: prefersReducedMotion ? 0 : dnaZ,
+          rotateX: prefersReducedMotion ? 0 : dnaRotateX,
+          rotateY: prefersReducedMotion ? 0 : dnaRotateY,
+          rotateZ: prefersReducedMotion ? 0 : dnaRotateZ,
           scale: prefersReducedMotion ? 1 : dnaScale,
           opacity: prefersReducedMotion ? 0.8 : dnaOpacity,
+          filter: prefersReducedMotion ? "none" : dnaFilter,
         }}
         aria-hidden="true"
       >

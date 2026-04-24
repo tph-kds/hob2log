@@ -1,3 +1,10 @@
+export interface PostMedia {
+  type: "image" | "video";
+  url: string;
+  alt?: string;
+  caption?: string;
+}
+
 export interface Post {
   slug: string;
   title: string;
@@ -5,6 +12,8 @@ export interface Post {
   createdAt: string;
   tags: string[];
   coverImage?: string;
+  media?: PostMedia[];
+  published?: boolean;
   content: string;
 }
 

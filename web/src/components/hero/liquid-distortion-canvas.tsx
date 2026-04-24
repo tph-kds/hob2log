@@ -31,17 +31,22 @@ export function LiquidDistortionCanvas({ targetRef, radius = 120, isActive }: Li
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const target = targetRef.current;
+    const targetElement = targetRef.current;
 
-    if (!canvas || !target) {
+    if (!canvas || !targetElement) {
       return;
     }
+
+    const target = targetElement;
 
     const context = canvas.getContext("2d", { alpha: true });
 
     if (!context) {
       return;
     }
+
+    const canvasElement = canvas;
+    const drawingContext = context;
 
     const pointer = { x: -10000, y: -10000, inside: false };
     const particles: Particle[] = [];
@@ -61,29 +66,31 @@ export function LiquidDistortionCanvas({ targetRef, radius = 120, isActive }: Li
       return;
     }
 
+    const offscreenCtx = offscreenContext;
+
     function buildParticles() {
       const rect = target.getBoundingClientRect();
       width = Math.max(2, Math.round(rect.width + padding * 2));
       height = Math.max(2, Math.round(rect.height + padding * 2));
 
-      canvas.width = Math.round(width * dpr);
-      canvas.height = Math.round(height * dpr);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
+      canvasElement.width = Math.round(width * dpr);
+      canvasElement.height = Math.round(height * dpr);
+      canvasElement.style.width = `${width}px`;
+      canvasElement.style.height = `${height}px`;
 
-      context.setTransform(dpr, 0, 0, dpr, 0, 0);
-      context.clearRect(0, 0, width, height);
+      drawingContext.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawingContext.clearRect(0, 0, width, height);
 
       offscreen.width = Math.round(width * dpr);
       offscreen.height = Math.round(height * dpr);
-      offscreenContext.setTransform(dpr, 0, 0, dpr, 0, 0);
-      offscreenContext.clearRect(0, 0, width, height);
+      offscreenCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      offscreenCtx.clearRect(0, 0, width, height);
 
       const charNodes = target.querySelectorAll<HTMLElement>("[data-reveal-char]");
 
-      offscreenContext.textAlign = "center";
-      offscreenContext.textBaseline = "middle";
-      offscreenContext.fillStyle = "rgba(255,255,255,1)";
+      offscreenCtx.textAlign = "center";
+      offscreenCtx.textBaseline = "middle";
+      offscreenCtx.fillStyle = "rgba(255,255,255,1)";
 
       charNodes.forEach((charNode) => {
         const value = (charNode.textContent ?? "").trim();
@@ -96,14 +103,14 @@ export function LiquidDistortionCanvas({ targetRef, radius = 120, isActive }: Li
         const charComputed = window.getComputedStyle(charNode);
         const charFont = `${charComputed.fontStyle || "normal"} ${charComputed.fontWeight || "700"} ${charComputed.fontSize || "48px"} ${charComputed.fontFamily || "sans-serif"}`;
 
-        offscreenContext.font = charFont;
+        offscreenCtx.font = charFont;
 
         const cx = charRect.left - rect.left + charRect.width * 0.5 + padding;
         const cy = charRect.top - rect.top + charRect.height * 0.5 + padding;
-        offscreenContext.fillText(value, cx, cy);
+        offscreenCtx.fillText(value, cx, cy);
       });
 
-      const image = offscreenContext.getImageData(0, 0, width, height).data;
+      const image = offscreenCtx.getImageData(0, 0, width, height).data;
       particles.length = 0;
 
       for (let y = 0; y < height; y += sampleStep) {
@@ -159,8 +166,8 @@ export function LiquidDistortionCanvas({ targetRef, radius = 120, isActive }: Li
     }
 
     function tick() {
-      context.clearRect(0, 0, width, height);
-      context.globalCompositeOperation = "lighter";
+      drawingContext.clearRect(0, 0, width, height);
+      drawingContext.globalCompositeOperation = "lighter";
 
       let hasResidualMotion = false;
 
@@ -214,13 +221,13 @@ export function LiquidDistortionCanvas({ targetRef, radius = 120, isActive }: Li
         const drawAlpha = Math.min(1, particle.alpha * (0.55 + influence * 0.45));
         const size = particle.size + influence * 1.8;
 
-        context.fillStyle = `hsla(${hue.toFixed(2)} 100% ${lightness.toFixed(2)}% / ${drawAlpha.toFixed(3)})`;
-        context.beginPath();
-        context.arc(particle.x, particle.y, size, 0, Math.PI * 2);
-        context.fill();
+        drawingContext.fillStyle = `hsla(${hue.toFixed(2)} 100% ${lightness.toFixed(2)}% / ${drawAlpha.toFixed(3)})`;
+        drawingContext.beginPath();
+        drawingContext.arc(particle.x, particle.y, size, 0, Math.PI * 2);
+        drawingContext.fill();
       }
 
-      context.globalCompositeOperation = "source-over";
+      drawingContext.globalCompositeOperation = "source-over";
 
       if (pointer.inside || hasResidualMotion) {
         rafId = window.requestAnimationFrame(tick);

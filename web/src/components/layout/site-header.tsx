@@ -46,7 +46,6 @@ export function SiteHeader() {
   // ── 2. Scroll detector: dock ↔ un-dock ──────────────────────────────────────
   useEffect(() => {
     if (!isDesktop) {
-      setIsDocked(false);
       return;
     }
 

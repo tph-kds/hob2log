@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
+import Script from "next/script";
 import { ProjectLogo } from "@/components/layout/project-logo";
 import { ThemeSwitcher } from "@/components/layout/theme-switcher";
 import { PageTransition } from "@/components/layout/page-transition";
@@ -65,10 +66,10 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${headingFont.variable} ${codeFont.variable} h-full antialiased`}
     >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
-      </head>
       <body suppressHydrationWarning className="min-h-full flex flex-col">
+        <Script id="theme-bootstrap" strategy="beforeInteractive">
+          {themeBootstrapScript}
+        </Script>
         <MusicProvider>
           <ProjectLogo />
           <SiteHeader />

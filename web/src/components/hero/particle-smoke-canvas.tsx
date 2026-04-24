@@ -227,19 +227,20 @@ export function ParticleSmokeCanvas({
   useEffect(() => {
     const targetNode = targetRef.current;
     if (!targetNode) return;
+    const target = targetNode;
 
     function updatePosition(event: PointerEvent) {
-      const rect = targetNode.getBoundingClientRect();
+      const rect = target.getBoundingClientRect();
       posRef.current.x = event.clientX - rect.left;
       posRef.current.y = event.clientY - rect.top;
     }
 
-    targetNode.addEventListener("pointerenter", updatePosition, { passive: true });
-    targetNode.addEventListener("pointermove", updatePosition, { passive: true });
+    target.addEventListener("pointerenter", updatePosition, { passive: true });
+    target.addEventListener("pointermove", updatePosition, { passive: true });
 
     return () => {
-      targetNode.removeEventListener("pointerenter", updatePosition);
-      targetNode.removeEventListener("pointermove", updatePosition);
+      target.removeEventListener("pointerenter", updatePosition);
+      target.removeEventListener("pointermove", updatePosition);
     };
   }, [targetRef]);
 
@@ -248,17 +249,18 @@ export function ParticleSmokeCanvas({
     const canvas = canvasRef.current;
     const target = targetRef.current;
     if (!canvas || !target) return;
+    const canvasElement = canvas;
+    const targetElement = target;
 
     function resize() {
-      if (!canvas || !target) return;
-      const rect = target.getBoundingClientRect();
-      canvas.width = rect.width;
-      canvas.height = rect.height;
+      const rect = targetElement.getBoundingClientRect();
+      canvasElement.width = rect.width;
+      canvasElement.height = rect.height;
     }
 
     resize();
     const ro = new ResizeObserver(resize);
-    ro.observe(target);
+    ro.observe(targetElement);
     return () => ro.disconnect();
   }, [targetRef]);
 
@@ -266,20 +268,21 @@ export function ParticleSmokeCanvas({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const canvasElement = canvas;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvasElement.getContext("2d");
     if (!ctx) return;
+    const context = ctx;
 
     function loop() {
-      if (!ctx || !canvas) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.shadowBlur = 0;
+      context.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      context.shadowBlur = 0;
 
       const palette = getThemePalette();
       const { x: cx, y: cy } = posRef.current;
 
       // Spawn particles when active
-      if (activeRef.current && canvas.width > 0) {
+      if (activeRef.current && canvasElement.width > 0) {
         const spawnCount = modeRef.current === "smoke" ? 2 : modeRef.current === "all" ? 4 : 3;
         for (let i = 0; i < spawnCount; i++) {
           if (particlesRef.current.length < 180) {
@@ -288,13 +291,13 @@ export function ParticleSmokeCanvas({
         }
 
         // Draw cursor ring
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(${palette[0][0]},${palette[0][1]},${palette[0][2]},0.22)`;
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 6]);
-        ctx.stroke();
-        ctx.setLineDash([]);
+        context.beginPath();
+        context.arc(cx, cy, radius, 0, Math.PI * 2);
+        context.strokeStyle = `rgba(${palette[0][0]},${palette[0][1]},${palette[0][2]},0.22)`;
+        context.lineWidth = 1.5;
+        context.setLineDash([4, 6]);
+        context.stroke();
+        context.setLineDash([]);
       }
 
       // Update + draw particles
@@ -310,7 +313,7 @@ export function ParticleSmokeCanvas({
         p.x += p.vx;
         p.y += p.vy;
 
-        drawParticle(ctx, p);
+        drawParticle(context, p);
         return true;
       });
 

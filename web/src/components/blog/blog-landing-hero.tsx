@@ -67,7 +67,7 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
   const dnaRotateZ = useTransform(dnaProgress, [0, 0.36, 0.68, 1], [0, 28, 72, 92]);
   const dnaScale = useTransform(dnaProgress, [0, 0.38, 0.7, 1], [1, 1.08, 1.18, 1.05]);
   const dnaShiftX = useTransform(dnaProgress, [0, 0.3, 0.62, 1], [0, 22, 70, 126]);
-  const dnaX = useTransform([depth, dnaShiftX], ([depthOffset, shiftXOffset]) => depthOffset + shiftXOffset);
+  const dnaX = useTransform([depth, dnaShiftX], (values) => Number(values[0] ?? 0) + Number(values[1] ?? 0));
   const dnaTravelY = useTransform(dnaProgress, [0, 0.28, 0.6, 0.82, 1], [0, 40, 210, 376, 520]);
   const dnaZ = useTransform(dnaProgress, [0, 0.42, 0.74, 1], [0, 64, 168, 94]);
   const dnaOpacity = useTransform(dnaProgress, [0, 0.35, 0.72, 1], [0.95, 0.9, 0.78, 0.58]);
@@ -308,7 +308,7 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
         style={{
           opacity: proteinOpacity,
           "--protein-spread": proteinSpreadPx,
-        } as CSSProperties}
+        } as unknown as CSSProperties}
       >
         {proteins.map((protein) => (
           <span

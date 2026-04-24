@@ -5,8 +5,8 @@ import { listPosts } from "@/lib/posts-store";
 
 export const dynamic = "force-dynamic";
 
-export default function BlogPage() {
-  const posts = listPosts();
+export default async function BlogPage() {
+  const posts = await listPosts();
 
   return (
     <div className="page-shell">
@@ -47,4 +47,4 @@ export default function BlogPage() {
       <SiteFooter />
     </div>
   );
-}
+}

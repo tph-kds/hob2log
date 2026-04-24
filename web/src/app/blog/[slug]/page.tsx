@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { MarkdownRenderer } from "@/components/blog/markdown-renderer";
 import { LiquidSection } from "@/components/layout/liquid-section";
 import { SiteFooter } from "@/components/layout/site-footer";
+import { isAdminSessionAuthorized } from "@/lib/admin-session";
 import { getPostBySlug, listPosts } from "@/lib/posts-store";
 import { Post } from "@/types/content";
 
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 
 interface BlogPostPageProps {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ preview?: string }>;
 }
 
 interface TocItem {
@@ -81,10 +83,13 @@ function getRelatedPosts(currentPost: Post, items: Post[]) {
     .slice(0, 3);
 }
 
-export default async function BlogPostPage({ params }: BlogPostPageProps) {
+export default async function BlogPostPage({ params, searchParams }: BlogPostPageProps) {
   const { slug } = await params;
-  const allPosts = listPosts();
-  const post = getPostBySlug(slug);
+  const query = await searchParams;
+  const wantsPreview = query.preview === "1" || query.preview === "true";
+  const canViewDraft = wantsPreview && await isAdminSessionAuthorized();
+  const allPosts = await listPosts({ includeDrafts: canViewDraft });
+  const post = await getPostBySlug(slug, { includeDrafts: canViewDraft });
 
   if (!post) {
     notFound();
@@ -116,13 +121,44 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
           <div className="mt-7 grid gap-8 lg:grid-cols-[minmax(0,1fr)_18rem]">
             <article>
+              {canViewDraft && post.published === false ? (
+                <p className="mb-3 inline-flex rounded-full border border-amber-300/35 bg-amber-200/10 px-3 py-1 text-xs uppercase tracking-[0.14em] text-amber-100">
+                  Draft Review Mode
+                </p>
+              ) : null}
               <p className="text-xs uppercase tracking-[0.16em] text-(--accent)">{post.createdAt}</p>
               <h1 className="mt-3 text-4xl font-semibold leading-tight">{post.title}</h1>
               <p className="mt-3 text-sm text-(--muted)">{post.tags.join(" · ")}</p>
 
+              {post.coverImage ? (
+                <div
+                  className="mt-6 h-56 w-full rounded-2xl border border-white/10 bg-cover bg-center md:h-72"
+                  style={{ backgroundImage: `url(${post.coverImage})` }}
+                  aria-label={`Cover image for ${post.title}`}
+                />
+              ) : null}
+
               <div className="mt-8">
                 <MarkdownRenderer content={post.content} />
               </div>
+
+              {post.media && post.media.length > 0 ? (
+                <section className="mt-8 space-y-4">
+                  <h2 className="text-xl font-semibold">Media Attachments</h2>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {post.media.map((item, index) => (
+                      <figure key={`${item.url}-${index}`} className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-3">
+                        {item.type === "video" ? (
+                          <video src={item.url} controls className="h-auto w-full rounded-xl" />
+                        ) : (
+                          <img src={item.url} alt={item.alt || post.title} className="h-auto w-full rounded-xl object-cover" />
+                        )}
+                        {item.caption ? <figcaption className="mt-2 text-xs text-sky-100/75">{item.caption}</figcaption> : null}
+                      </figure>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
 
               {relatedPosts.length > 0 ? (
                 <section className="mt-10">

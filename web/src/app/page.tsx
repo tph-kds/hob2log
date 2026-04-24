@@ -8,8 +8,9 @@ import { listPosts } from "@/lib/posts-store";
 
 export const dynamic = "force-dynamic";
 
-export default function Home() {
-  const featuredPosts = listPosts().slice(0, 3);
+export default async function Home() {
+  const posts = await listPosts();
+  const featuredPosts = Array.isArray(posts) ? posts.slice(0, 3) : [];
   const yugiohCards = [
     {
       id: "ygo-a", title: "Dark Magician", phaseOffset: 0.0,
@@ -159,6 +160,21 @@ export default function Home() {
                   href={`/blog/${post.slug}`}
                   className="rounded-2xl border border-white/10 bg-white/5 p-4"
                 >
+                  {post.coverImage ? (
+                    <div
+                      className="mb-3 h-40 w-full rounded-xl border border-white/10 bg-cover bg-center"
+                      style={{ backgroundImage: `url(${post.coverImage})` }}
+                      aria-label={`Cover image for ${post.title}`}
+                    />
+                  ) : post.media?.[0]?.type === "video" ? (
+                    <video src={post.media[0].url} controls className="mb-3 h-40 w-full rounded-xl border border-white/10 object-cover" />
+                  ) : post.media?.[0]?.url ? (
+                    <div
+                      className="mb-3 h-40 w-full rounded-xl border border-white/10 bg-cover bg-center"
+                      style={{ backgroundImage: `url(${post.media[0].url})` }}
+                      aria-label={`Media preview for ${post.title}`}
+                    />
+                  ) : null}
                   <div className="post-tags-row">
                     {post.tags.map((tag) => (
                       <span key={tag} className="post-tag-badge">{tag}</span>

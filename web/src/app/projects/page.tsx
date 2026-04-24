@@ -1,8 +1,10 @@
 import { LiquidSection } from "@/components/layout/liquid-section";
 import { SiteFooter } from "@/components/layout/site-footer";
-import { projects } from "@/content/projects";
+import { listProjects } from "@/lib/projects-store";
 
-export default function ProjectsPage() {
+export default async function ProjectsPage() {
+  const projects = await listProjects();
+
   return (
     <div className="page-shell">
       <main className="page-main mx-auto w-full max-w-5xl px-6 pb-12 pt-20 md:px-10 md:pt-24">

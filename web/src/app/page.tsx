@@ -107,7 +107,7 @@ export default async function Home() {
 
       <BlogLandingHero ctaHref="#home-main" ctaLabel="Enter Workspace" scrollHint="Scroll down for latest notes" />
 
-      <main id="home-main" className="page-main mx-auto flex w-full max-w-6xl flex-col gap-14 px-6 pb-12 pt-20 md:px-10 md:pt-24">
+      <main id="home-main" className="page-main mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 pb-10 pt-[4.5rem] sm:gap-14 sm:px-6 sm:pb-12 sm:pt-20 md:px-10 md:pt-24">
         <LiquidSection className="relative rounded-3xl p-8 md:p-12">
           <div className="pointer-events-none absolute inset-0 opacity-75">
             <div className="absolute -right-24 -top-24 h-56 w-56 rounded-full bg-cyan-300/20 blur-3xl" />

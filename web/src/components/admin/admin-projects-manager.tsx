@@ -135,7 +135,7 @@ export function AdminProjectsManager() {
 
   return (
     <div className="page-shell">
-      <main className="page-main mx-auto w-full max-w-6xl px-6 pb-12 pt-20 md:px-10 md:pt-24">
+      <main className="page-main mx-auto w-full max-w-6xl px-4 pb-10 pt-[4.5rem] sm:px-6 sm:pb-12 sm:pt-20 md:px-10 md:pt-24">
         <LiquidSection className="rounded-3xl p-6 md:p-8">
           <p className="text-xs uppercase tracking-[0.18em] text-sky-200/85">Admin Projects Manager</p>
           <h1 className="mt-2 text-4xl font-semibold">Manage Side Projects</h1>

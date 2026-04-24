@@ -3,9 +3,9 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 
 const navigationLinks = [
-  { href: "/", label: "Home", seed: 24 },
-  { href: "/blog", label: "Blog", seed: 52 },
-  { href: "/projects", label: "Projects", seed: 78 },
+  { href: "/", label: "Home", seed: 24, icon: "home" },
+  { href: "/blog", label: "Blog", seed: 52, icon: "blog" },
+  { href: "/projects", label: "Projects", seed: 78, icon: "projects" },
 ];
 
 const focusRules = [
@@ -15,11 +15,41 @@ const focusRules = [
 ];
 
 const socialLinks = [
-  { href: "https://github.com", label: "GitHub", seed: 29 },
-  { href: "https://www.linkedin.com", label: "LinkedIn", seed: 46 },
-  { href: "/projects", label: "Portfolio", seed: 72 },
-  { href: "https://buymeacoffee.com", label: "Donate", seed: 85 },
+  { href: "https://github.com", label: "GitHub", seed: 29, icon: "github" },
+  { href: "https://www.linkedin.com", label: "LinkedIn", seed: 46, icon: "linkedin" },
+  { href: "/projects", label: "Portfolio", seed: 72, icon: "portfolio" },
+  { href: "https://buymeacoffee.com", label: "Donate", seed: 85, icon: "donate" },
 ];
+
+type FooterIconKind = "home" | "blog" | "projects" | "github" | "linkedin" | "portfolio" | "donate";
+
+function FooterGlyph({ kind }: { kind: FooterIconKind }) {
+  if (kind === "home") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.2 4.5 10v9h5.6v-5.2h3.8V19h5.6v-9z" fill="currentColor" /></svg>;
+  }
+
+  if (kind === "blog") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z" fill="none" stroke="currentColor" strokeWidth="1.8" /><path d="M8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>;
+  }
+
+  if (kind === "projects") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7.2h6.4v9.6H4.5zM13.1 7.2h6.4v4.2h-6.4zM13.1 13h6.4v3.8h-6.4z" fill="currentColor" /></svg>;
+  }
+
+  if (kind === "github") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5A9.7 9.7 0 0 0 2.3 12.3a9.8 9.8 0 0 0 6.6 9.2c.5.1.6-.2.6-.5v-2c-2.7.6-3.3-1.1-3.3-1.1-.4-1.1-1-1.4-1-1.4-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.4 1.1 3 1 .1-.7.3-1.1.6-1.3-2.2-.3-4.5-1.1-4.5-5a3.9 3.9 0 0 1 1-2.7 3.6 3.6 0 0 1 .1-2.6s.8-.3 2.7 1a9.4 9.4 0 0 1 4.8 0c1.9-1.3 2.7-1 2.7-1 .4 1 .2 2 .1 2.6a3.9 3.9 0 0 1 1 2.7c0 3.9-2.3 4.7-4.5 5 .4.3.7 1 .7 2v3c0 .3.1.6.6.5a9.8 9.8 0 0 0 6.6-9.2A9.7 9.7 0 0 0 12 2.5Z" fill="currentColor" /></svg>;
+  }
+
+  if (kind === "linkedin") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.1 8.4h3.3V19H5.1zM6.8 4.9a1.9 1.9 0 1 1 0 3.8 1.9 1.9 0 0 1 0-3.8M10.2 8.4h3.2v1.4h.1c.5-.9 1.5-1.7 3.2-1.7 3.4 0 4 2.1 4 4.9V19h-3.3v-5.3c0-1.3 0-2.8-1.8-2.8s-2 1.3-2 2.7V19h-3.3z" fill="currentColor" /></svg>;
+  }
+
+  if (kind === "portfolio") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.8 7.5h16.4v10.7H3.8z" fill="none" stroke="currentColor" strokeWidth="1.8" /><path d="M8.3 7.5V6.2h7.4v1.3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /><path d="M3.8 12h16.4" fill="none" stroke="currentColor" strokeWidth="1.8" /></svg>;
+  }
+
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.2s-6.5-3.8-6.5-9.3a3.8 3.8 0 0 1 6.5-2.7 3.8 3.8 0 0 1 6.5 2.7c0 5.5-6.5 9.3-6.5 9.3Z" fill="currentColor" /></svg>;
+}
 
 function getHoverSeedStyle(seed: number) {
   return {
@@ -50,8 +80,9 @@ export function SiteFooter() {
             <p className="footer-label text-xs uppercase tracking-[0.2em] text-sky-100/75">Navigation</p>
             <div className="mt-3 flex flex-col gap-2 text-sm">
               {navigationLinks.map((item) => (
-                <Link key={item.href} href={item.href} className="footer-hover-item" style={getHoverSeedStyle(item.seed)}>
-                  {item.label}
+                <Link key={item.href} href={item.href} className="footer-hover-item footer-link-with-icon" style={getHoverSeedStyle(item.seed)}>
+                  <span className="footer-link-icon" aria-hidden="true"><FooterGlyph kind={item.icon} /></span>
+                  <span>{item.label}</span>
                 </Link>
               ))}
             </div>
@@ -74,12 +105,14 @@ export function SiteFooter() {
               {socialLinks.map((item) => (
                 <li key={item.label}>
                   {item.href.startsWith("http") ? (
-                    <a href={item.href} target="_blank" rel="noreferrer" className="footer-hover-item" style={getHoverSeedStyle(item.seed)}>
-                      {item.label}
+                    <a href={item.href} target="_blank" rel="noreferrer" className="footer-hover-item footer-link-with-icon" style={getHoverSeedStyle(item.seed)}>
+                      <span className="footer-link-icon" aria-hidden="true"><FooterGlyph kind={item.icon} /></span>
+                      <span>{item.label}</span>
                     </a>
                   ) : (
-                    <Link href={item.href} className="footer-hover-item" style={getHoverSeedStyle(item.seed)}>
-                      {item.label}
+                    <Link href={item.href} className="footer-hover-item footer-link-with-icon" style={getHoverSeedStyle(item.seed)}>
+                      <span className="footer-link-icon" aria-hidden="true"><FooterGlyph kind={item.icon} /></span>
+                      <span>{item.label}</span>
                     </Link>
                   )}
                 </li>

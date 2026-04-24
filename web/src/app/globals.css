@@ -676,12 +676,89 @@ body::after {
   display: inline-flex;
   width: max-content;
   white-space: nowrap;
-  padding: 0.4rem 0.6rem;
-  border-radius: 0.8rem;
-  border: 1px solid rgba(205, 236, 255, 0.24);
-  background: linear-gradient(145deg, rgba(8, 16, 31, 0.76), rgba(18, 34, 52, 0.45));
-  box-shadow: 0 12px 26px rgba(2, 8, 22, 0.4);
-  backdrop-filter: blur(10px);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 220ms ease, transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.site-logo-permanent:focus,
+.site-logo-permanent:active,
+.site-logo-permanent:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.site-logo-permanent.is-at-top {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.site-logo-permanent.is-hidden {
+  opacity: 0;
+  transform: translateY(-0.55rem);
+  pointer-events: none;
+}
+
+.site-logo-title-enhanced {
+  position: relative;
+  display: inline-block;
+  color: transparent;
+  background-image:
+    linear-gradient(98deg, #b7f7ff 0%, #6fc6ff 20%, #9ffcff 38%, #b6ffe8 54%, #7bddff 72%, #d8fbff 100%),
+    repeating-radial-gradient(circle at 0% 50%, rgba(153, 247, 255, 0.35) 0 5px, rgba(86, 199, 255, 0.18) 5px 11px, rgba(154, 255, 223, 0.1) 11px 16px),
+    linear-gradient(112deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.34) 32%, rgba(255, 255, 255, 0.08) 56%, rgba(255, 255, 255, 0.02) 100%);
+  background-size: 300% 100%, 190% 100%, 220% 100%;
+  background-position: 0% 50%, 0% 50%, 0% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-stroke: 1px color-mix(in srgb, #e8faff 56%, transparent);
+  text-shadow: 0 0 18px color-mix(in srgb, #8ae1ff 54%, transparent), 0 0 34px color-mix(in srgb, #9effe4 28%, transparent), 0 2px 14px rgba(120, 220, 255, 0.28);
+  animation: brand-gradient-flow 7.2s linear infinite, site-logo-inner-wave 10.4s linear infinite;
+}
+
+.site-logo-title-enhanced::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  background-image: linear-gradient(108deg, rgba(255, 255, 255, 0.06) 8%, rgba(255, 255, 255, 0.88) 34%, rgba(255, 255, 255, 0.2) 58%, rgba(255, 255, 255, 0.06) 84%);
+  background-size: 210% 100%;
+  background-position: -120% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  mix-blend-mode: screen;
+  opacity: 0.7;
+  pointer-events: none;
+  animation: site-logo-gloss-sweep 8.2s linear infinite;
+}
+
+.site-logo-title-enhanced::after {
+  content: "";
+  position: absolute;
+  left: -0.12rem;
+  right: -0.12rem;
+  bottom: -0.36rem;
+  height: 12px;
+  border-radius: 999px;
+  background:
+    radial-gradient(13px 5px at 7% 66%, color-mix(in srgb, var(--accent) 84%, #9af0ff 16%), transparent 74%),
+    radial-gradient(11px 4px at 26% 30%, color-mix(in srgb, var(--accent-2) 82%, #beffe9 18%), transparent 76%),
+    radial-gradient(12px 5px at 46% 72%, color-mix(in srgb, var(--accent) 78%, #95e8ff 22%), transparent 74%),
+    radial-gradient(10px 4px at 62% 32%, color-mix(in srgb, var(--accent-2) 84%, #cbfff2 16%), transparent 76%),
+    radial-gradient(12px 5px at 78% 68%, color-mix(in srgb, var(--accent) 80%, #9ef2ff 20%), transparent 74%),
+    radial-gradient(10px 4px at 93% 38%, color-mix(in srgb, var(--accent-2) 82%, #b6ffe6 18%), transparent 76%);
+  background-size: 210% 130%;
+  filter: blur(0.4px) drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 34%, transparent));
+  opacity: 0.8;
+  animation: site-logo-spark-path 9.8s linear infinite;
 }
 
 .site-logo-permanent.brand-mark::after {
@@ -749,6 +826,12 @@ body::after {
   :root:not([data-motion="force"]) .nav-water-link,
   :root:not([data-motion="force"]) .nav-water-link::before {
     transition: none;
+  }
+
+  :root:not([data-motion="force"]) .site-logo-title-enhanced,
+  :root:not([data-motion="force"]) .site-logo-title-enhanced::before,
+  :root:not([data-motion="force"]) .site-logo-title-enhanced::after {
+    animation: none;
   }
 }
 
@@ -2598,7 +2681,20 @@ body[data-home-no-blur="true"] .diamond-glow::after {
   }
 
   .site-logo-permanent {
-    display: none;
+    left: 1.72rem;
+    top: calc(env(safe-area-inset-top, 0px) + 6.05rem);
+    transform: none;
+    z-index: 88;
+    display: inline-flex;
+    max-width: min(64vw, 14rem);
+    justify-content: flex-start;
+    text-align: left;
+    padding-inline: 0.16rem;
+  }
+
+  .site-logo-title-enhanced {
+    font-size: 0.95rem;
+    letter-spacing: 0.01em;
   }
 
   .nav-water-bridge {
@@ -2627,6 +2723,29 @@ body[data-home-no-blur="true"] .diamond-glow::after {
 
   .scroll-ring-wrap {
     display: none;
+  }
+}
+
+@media (max-width: 768px) and (orientation: landscape) {
+  .site-logo-permanent {
+    left: 0.8rem;
+    top: calc(env(safe-area-inset-top, 0px) + 0.38rem);
+    transform: none;
+    max-width: min(62vw, 20rem);
+    justify-content: flex-start;
+    text-align: left;
+    padding-inline: 0.18rem;
+  }
+}
+
+@media (max-width: 768px) and (orientation: portrait) {
+  .site-logo-permanent {
+    left: 1.72rem;
+    top: calc(env(safe-area-inset-top, 0px) + 6.05rem);
+    transform: none;
+    max-width: min(64vw, 14rem);
+    justify-content: flex-start;
+    text-align: left;
   }
 }
 
@@ -4364,6 +4483,18 @@ body[data-focus-mode="on"] .scroll-ring-wrap {
 }
 
 @media (max-width: 420px) {
+  .site-logo-permanent {
+    top: calc(env(safe-area-inset-top, 0px) + 1.92rem);
+    left: 0.56rem;
+    transform: none;
+    max-width: min(66vw, 13.2rem);
+    padding-inline: 0.12rem;
+  }
+
+  .site-logo-title-enhanced {
+    font-size: 0.84rem;
+  }
+
   .mobile-tabbar-toggle {
     width: 1.9rem;
     height: 1.35rem;
@@ -4410,6 +4541,47 @@ body[data-focus-mode="on"] .scroll-ring-wrap {
   .music-track-item {
     padding: 0.32rem 0.42rem;
     gap: 0.45rem;
+  }
+}
+
+@keyframes site-logo-glow-pulse {
+  0%,
+  100% {
+    filter: saturate(1) brightness(1);
+    transform: translateZ(0);
+  }
+  50% {
+    filter: saturate(1.14) brightness(1.08);
+    transform: translateZ(0) scale(1.015);
+  }
+}
+
+@keyframes site-logo-inner-wave {
+  0% {
+    background-position: 0% 50%, 0% 50%, 0% 50%;
+  }
+  100% {
+    background-position: 210% 50%, 170% 50%, 220% 50%;
+  }
+}
+
+@keyframes site-logo-gloss-sweep {
+  0% {
+    background-position: -130% 50%;
+    opacity: 0.42;
+  }
+  100% {
+    background-position: 220% 50%;
+    opacity: 0.42;
+  }
+}
+
+@keyframes site-logo-spark-path {
+  0% {
+    background-position: 0% 54%;
+  }
+  100% {
+    background-position: 220% 54%;
   }
 }
 

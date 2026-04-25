@@ -27,7 +27,15 @@ function AdminLoginPageContent() {
     const data = await response.json();
 
     if (!response.ok) {
-      setStatus(data.error ?? "Login failed");
+      const retryAfterSeconds = Number(data.retryAfterSeconds);
+
+      if (response.status === 429 && Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+        const retryAfterMinutes = Math.ceil(retryAfterSeconds / 60);
+        setStatus(`Too many failed attempts. Try again in ${retryAfterMinutes} minute(s).`);
+      } else {
+        setStatus(data.error ?? "Login failed");
+      }
+
       setIsSubmitting(false);
       return;
     }

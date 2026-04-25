@@ -22,7 +22,7 @@ const codeFont = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "hob2log",
+  title: "hob2log | Tran Phi Hung",
   description: "Private blog for experiences, side projects, and visual experiments",
 };
 

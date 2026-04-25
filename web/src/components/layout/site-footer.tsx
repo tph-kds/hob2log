@@ -2,10 +2,20 @@ import Image from "next/image";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 
-const navigationLinks = [
+type FooterIconKind = "home" | "blog" | "projects" | "github" | "linkedin" | "x" | "portfolio" | "donate";
+
+type FooterLinkItem = {
+  href: string;
+  label: string;
+  seed: number;
+  icon: FooterIconKind;
+};
+
+const navigationLinks: FooterLinkItem[] = [
   { href: "/", label: "Home", seed: 24, icon: "home" },
   { href: "/blog", label: "Blog", seed: 52, icon: "blog" },
   { href: "/projects", label: "Projects", seed: 78, icon: "projects" },
+  { href: "/policy", label: "Policy", seed: 66, icon: "projects" },
 ];
 
 const focusRules = [
@@ -14,14 +24,13 @@ const focusRules = [
   { label: "Keep writing clear and searchable.", seed: 61 },
 ];
 
-const socialLinks = [
+const socialLinks: FooterLinkItem[] = [
   { href: "https://github.com", label: "GitHub", seed: 29, icon: "github" },
+  { href: "https://x.com", label: "X", seed: 34, icon: "x" },
   { href: "https://www.linkedin.com", label: "LinkedIn", seed: 46, icon: "linkedin" },
   { href: "/projects", label: "Portfolio", seed: 72, icon: "portfolio" },
   { href: "https://buymeacoffee.com", label: "Donate", seed: 85, icon: "donate" },
 ];
-
-type FooterIconKind = "home" | "blog" | "projects" | "github" | "linkedin" | "portfolio" | "donate";
 
 function FooterGlyph({ kind }: { kind: FooterIconKind }) {
   if (kind === "home") {
@@ -42,6 +51,10 @@ function FooterGlyph({ kind }: { kind: FooterIconKind }) {
 
   if (kind === "linkedin") {
     return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.1 8.4h3.3V19H5.1zM6.8 4.9a1.9 1.9 0 1 1 0 3.8 1.9 1.9 0 0 1 0-3.8M10.2 8.4h3.2v1.4h.1c.5-.9 1.5-1.7 3.2-1.7 3.4 0 4 2.1 4 4.9V19h-3.3v-5.3c0-1.3 0-2.8-1.8-2.8s-2 1.3-2 2.7V19h-3.3z" fill="currentColor" /></svg>;
+  }
+
+  if (kind === "x") {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.4 3h3.2l-7 8 8.2 10h-6.4l-5-6.2L4.7 21H1.5l7.5-8.6L1.1 3h6.5l4.5 5.7zM16.3 19h1.8L6.6 4.9H4.7z" fill="currentColor" /></svg>;
   }
 
   if (kind === "portfolio") {
@@ -67,9 +80,12 @@ export function SiteFooter() {
       <div className="site-footer-panel site-footer-panel-expanded">
         <div className="site-footer-grid">
           <section>
-            <p className="text-xs uppercase tracking-[0.2em] text-sky-200/80">hob2log</p>
+            <p className="footer-brand-typing text-xs uppercase tracking-[0.2em] font-mono">
+              <span className="sr-only">hob2log | Tran Phi Hung</span>
+              <span className="footer-typing-line" aria-hidden="true">hob2log | Tran Phi Hung</span>
+            </p>
             <p className="mt-2 max-w-sm text-sm text-(--muted)">
-              Private workspace for writing, prototyping, and preserving engineering notes with intention and clarity.
+              Private workspace for writing, prototyping, discussing, and preserving engineering notes with intention and clarity.
             </p>
             <p className="footer-copyright mt-6 text-xs text-(--muted)">
               © {year} hob2log. All rights reserved.

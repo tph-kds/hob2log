@@ -10,6 +10,7 @@ const links = [
   { href: "/", label: "Home" },
   { href: "/blog", label: "Blog" },
   { href: "/projects", label: "Projects" },
+  { href: "/policy", label: "Policy" },
 ];
 
 // ─── Position targets ───────────────────────────────────────────────────────

@@ -1,22 +1,30 @@
 "use client";
 
-import { Line } from "@react-three/drei";
 import { Canvas, useFrame, useLoader } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import {
+  ACESFilmicToneMapping,
   AdditiveBlending,
   BufferAttribute,
   ClampToEdgeWrapping,
+  Color,
+  DoubleSide,
   Group,
   LinearFilter,
   LinearMipmapLinearFilter,
   MathUtils,
   Mesh,
+  InstancedMesh,
   PointsMaterial,
+  MeshStandardMaterial,
+  Object3D,
+  Quaternion,
   Shape,
   ShapeGeometry,
   SRGBColorSpace,
   TextureLoader,
+  Vector3,
 } from "three";
 
 interface FloatingCardInput {
@@ -68,6 +76,26 @@ interface ThemeVisualConfig {
   grade: ThemeColorGrade;
 }
 
+interface DnaVisualConfig {
+  backboneCount: number;
+  pairCount: number;
+  flowCount: number;
+  rootX: number;
+  rootY: number;
+  rootZ: number;
+  rootScale: number;
+}
+
+interface DnaActivitySignal {
+  pulse: number;
+  burst: number;
+  burstPhase: number;
+  activity: number;
+  colorPhase: number;
+  flowDirection: number;
+  visibility: number;
+}
+
 interface CardMeshProps {
   card: FloatingCardInput;
   index: number;
@@ -77,22 +105,6 @@ interface CardMeshProps {
     y: number;
   }>;
   profile: ThemeMotionProfile;
-  grade?: ThemeColorGrade;
-}
-
-interface TrailParticlesProps {
-  count: number;
-  phaseOffset: number;
-  color: string;
-  pointerRef: MutableRefObject<{
-    x: number;
-    y: number;
-  }>;
-  profile: ThemeMotionProfile;
-  layerOffset: number;
-  scrollProgressRef: MutableRefObject<number>;
-  lowOpacity: number;
-  highOpacity: number;
 }
 
 const THEME_MOTION_PROFILES: Record<string, ThemeMotionProfile> = {
@@ -117,6 +129,16 @@ const THEME_COLOR_GRADES: Record<string, ThemeColorGrade> = {
   leather: { trailPrimary: "#d3a27a", trailSecondary: "#f0c39b", edgeTint: "#c98f66", trailOpacityLow: 0.08, trailOpacityHigh: 0.28 },
 };
 
+const DNA_VISUAL_CONFIG: DnaVisualConfig = {
+  backboneCount: 62,
+  pairCount: 20,
+  flowCount: 42,
+  rootX: 1.18,
+  rootY: -0.06,
+  rootZ: -1.5,
+  rootScale: 0.56,
+};
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -124,6 +146,29 @@ function clamp(value: number, min: number, max: number) {
 function smoothstep(edge0: number, edge1: number, x: number) {
   const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
   return t * t * (3 - 2 * t);
+}
+
+function pseudoRandom(seed: number) {
+  const value = Math.sin(seed * 127.1 + seed * seed * 0.193) * 43758.5453123;
+  return value - Math.floor(value);
+}
+
+const BIO_CYAN = new Color("#46e8ff");
+const BIO_PURPLE = new Color("#9d62ff");
+const BIO_BLUE = new Color("#3c80ff");
+
+function sampleBioGradient(target: Color, phase: number) {
+  const wrapped = ((phase % 3) + 3) % 3;
+
+  if (wrapped < 1) {
+    return target.copy(BIO_CYAN).lerp(BIO_PURPLE, wrapped);
+  }
+
+  if (wrapped < 2) {
+    return target.copy(BIO_PURPLE).lerp(BIO_BLUE, wrapped - 1);
+  }
+
+  return target.copy(BIO_BLUE).lerp(BIO_CYAN, wrapped - 2);
 }
 
 function createRoundedRectShape(width: number, height: number, radius: number) {
@@ -283,104 +328,1102 @@ function normalizeCardImageUrl(url: string) {
   }
 }
 
-function RailwayLines({ grade, pointerRef }: { palette: ThemePalette, grade: ThemeColorGrade, pointerRef: MutableRefObject<{ x: number; y: number }> }) {
-  const railPoints = useMemo(() => {
-    return [0, 1, 2, 3].map(idx => {
-      const pts: [number, number, number][] = [];
-      for (let i = 0; i <= 60; i++) {
-        const p = getPath(idx, i / 60);
-        pts.push([p.x, p.y, p.z - 0.15]);
-      }
-      return pts;
-    });
-  }, []);
+function sampleHelixPosition(
+  target: Vector3,
+  t: number,
+  side: 0 | 1,
+  elapsed: number,
+  radius: number,
+  profile: ThemeMotionProfile,
+  phaseOffset: number,
+  activity = 0,
+  attraction = 0
+) {
+  const wrapped = t - Math.floor(t);
+  const organicNoise = Math.sin(elapsed * 0.34 + wrapped * Math.PI * 5.4 + phaseOffset) * 0.04;
+  const verticalWave = Math.sin(elapsed * 0.16 + wrapped * Math.PI * 2.6 + phaseOffset) * 0.06 + organicNoise;
+  const twistWave = Math.sin(elapsed * 0.27 + wrapped * Math.PI * 4.2 + phaseOffset * 1.7) * (0.12 + activity * 0.04);
+  const sideOffset = side === 0 ? 0 : Math.PI;
+  const angle = wrapped * Math.PI * 7.1 + elapsed * (0.2 + profile.motionIntensity * 0.08) + twistWave + sideOffset;
+  const dynamicRadius = radius + Math.sin(elapsed * 0.35 + wrapped * Math.PI * 3.8 + phaseOffset) * 0.05 + activity * 0.03;
+  const y = MathUtils.lerp(-3.15, 3.15, wrapped) + verticalWave;
 
-  const railRef = useRef<Group>(null);
+  target.set(
+    Math.cos(angle) * dynamicRadius,
+    y,
+    Math.sin(angle) * dynamicRadius * 0.86
+  );
+
+  if (attraction > 0) {
+    const centerFalloff = 1 - Math.min(1, Math.abs(y) / 4.2);
+    const pull = attraction * centerFalloff;
+    target.x *= 1 - pull * 0.28;
+    target.z *= 1 - pull * 0.2;
+  }
+
+  return target;
+}
+
+function DnaBackboneStrands({
+  pointerRef,
+  profile,
+  palette,
+  grade,
+  activityRef,
+}: {
+  pointerRef: MutableRefObject<{ x: number; y: number }>;
+  profile: ThemeMotionProfile;
+  palette: ThemePalette;
+  grade: ThemeColorGrade;
+  activityRef: MutableRefObject<DnaActivitySignal>;
+}) {
+  const leftTubeRef = useRef<InstancedMesh>(null);
+  const rightTubeRef = useRef<InstancedMesh>(null);
+  const leftSheathRef = useRef<InstancedMesh>(null);
+  const rightSheathRef = useRef<InstancedMesh>(null);
+  const leftNodeRef = useRef<InstancedMesh>(null);
+  const rightNodeRef = useRef<InstancedMesh>(null);
+  const leftFlowRef = useRef<InstancedMesh>(null);
+  const rightFlowRef = useRef<InstancedMesh>(null);
+  const helper = useMemo(() => new Object3D(), []);
+  const helperB = useMemo(() => new Object3D(), []);
+  const sample = useMemo(() => new Vector3(), []);
+  const sampleB = useMemo(() => new Vector3(), []);
+  const direction = useMemo(() => new Vector3(), []);
+  const yAxis = useMemo(() => new Vector3(0, 1, 0), []);
+  const accentPrimary = useMemo(() => new Color(palette.accent), [palette.accent]);
+  const accentSecondary = useMemo(() => new Color(palette.accent2), [palette.accent2]);
+  const gradientColor = useMemo(() => new Color(), []);
+  const tubeCount = DNA_VISUAL_CONFIG.backboneCount;
+  const nodeCount = 28;
+  const flowCount = 20;
+  const flowSeeds = useMemo(
+    () =>
+      Array.from({ length: flowCount }, (_, index) => ({
+        phase: pseudoRandom(index + 30.4),
+        speed: MathUtils.lerp(0.08, 0.24, pseudoRandom(index + 41.2)),
+        radial: MathUtils.lerp(-0.05, 0.04, pseudoRandom(index + 50.9)),
+      })),
+    [flowCount]
+  );
 
   useFrame((state) => {
-    if (!railRef.current) return;
+    const leftTube = leftTubeRef.current;
+    const rightTube = rightTubeRef.current;
+    const leftSheath = leftSheathRef.current;
+    const rightSheath = rightSheathRef.current;
+    const leftNode = leftNodeRef.current;
+    const rightNode = rightNodeRef.current;
+    const leftFlow = leftFlowRef.current;
+    const rightFlow = rightFlowRef.current;
+    if (!leftTube || !rightTube || !leftSheath || !rightSheath || !leftNode || !rightNode || !leftFlow || !rightFlow) {
+      return;
+    }
+
     const elapsed = state.clock.getElapsedTime();
-    const pointerState = pointerRef.current;
-    railRef.current.children.forEach((child, i) => {
-      child.position.x = pointerState.x * 0.08 * Math.sin(elapsed + i);
-      child.position.y = -pointerState.y * 0.05 * Math.cos(elapsed * 0.8 + i);
-    });
+    const pointer = pointerRef.current;
+    const signal = activityRef.current;
+    const visibility = signal.visibility;
+    const activity = signal.activity;
+    const burst = signal.burst;
+    const attract = 0.2 + signal.pulse * 0.55;
+
+    for (let side = 0; side < 2; side += 1) {
+      const tube = side === 0 ? leftTube : rightTube;
+      const sheath = side === 0 ? leftSheath : rightSheath;
+      const node = side === 0 ? leftNode : rightNode;
+      const flow = side === 0 ? leftFlow : rightFlow;
+
+      for (let index = 0; index < tubeCount; index += 1) {
+        const t0 = index / Math.max(1, tubeCount - 1);
+        const t1 = (index + 1) / Math.max(1, tubeCount - 1);
+        const pointA = sampleHelixPosition(sample, t0, side as 0 | 1, elapsed, 1.04, profile, 0.17, activity, attract);
+        const pointB = sampleHelixPosition(sampleB, t1, side as 0 | 1, elapsed, 1.04, profile, 0.17, activity, attract);
+        const depthWeight = clamp((pointA.z + pointB.z + 2.3) / 4.6, 0, 1);
+        const parallaxX = pointer.x * MathUtils.lerp(0.05, 0.2, depthWeight);
+        const parallaxY = -pointer.y * MathUtils.lerp(0.03, 0.12, depthWeight);
+
+        helper.position.set((pointA.x + pointB.x) * 0.5 + parallaxX, (pointA.y + pointB.y) * 0.5 + parallaxY, (pointA.z + pointB.z) * 0.5);
+        direction.copy(pointB).sub(pointA);
+        const segmentLength = Math.max(0.001, direction.length());
+        helper.quaternion.setFromUnitVectors(yAxis, direction.normalize());
+        const radial = MathUtils.lerp(0.017, 0.029, depthWeight) * (1 + Math.sin(elapsed * 1.3 + index * 0.15 + side) * 0.12);
+        helper.scale.set(radial, segmentLength, radial);
+        helper.updateMatrix();
+        tube.setMatrixAt(index, helper.matrix);
+
+        helper.scale.set(radial * 1.8, segmentLength * 1.02, radial * 1.8);
+        helper.updateMatrix();
+        sheath.setMatrixAt(index, helper.matrix);
+      }
+
+      for (let index = 0; index < nodeCount; index += 1) {
+        const nodeT = (index / nodeCount + Math.sin(elapsed * 0.17 + index * 0.9 + side) * 0.008 + 1) % 1;
+        const nodePoint = sampleHelixPosition(sample, nodeT, side as 0 | 1, elapsed, 1.06, profile, index * 0.37, activity, attract);
+        const nodeDepth = clamp((nodePoint.z + 1.25) / 2.4, 0, 1);
+        const parallaxX = pointer.x * MathUtils.lerp(0.04, 0.18, nodeDepth);
+        const parallaxY = -pointer.y * MathUtils.lerp(0.02, 0.09, nodeDepth);
+        const burstWave = Math.exp(-Math.abs(nodeT - signal.burstPhase) * 18) * burst;
+        const nodePulse = (Math.sin(elapsed * 1.8 + index * 0.7 + side * 1.9) + 1) * 0.5;
+        const nodeScale = MathUtils.lerp(0.028, 0.055, nodePulse * 0.6 + burstWave * 0.9);
+
+        helper.position.set(nodePoint.x + parallaxX, nodePoint.y + parallaxY, nodePoint.z);
+        helper.scale.setScalar(nodeScale);
+        helper.quaternion.identity();
+        helper.updateMatrix();
+        node.setMatrixAt(index, helper.matrix);
+      }
+
+      for (let index = 0; index < flowCount; index += 1) {
+        const seed = flowSeeds[index];
+        const directionBias = signal.flowDirection > 0 ? 1 : -1;
+        const travel = elapsed * seed.speed * directionBias + seed.phase;
+        const t = ((travel + (burst > 0.15 ? burst * 0.2 : 0)) % 1 + 1) % 1;
+        const point = sampleHelixPosition(sample, t, side as 0 | 1, elapsed, 0.9 + seed.radial, profile, seed.phase * Math.PI * 2, activity, attract);
+        const depthWeight = clamp((point.z + 1.2) / 2.4, 0, 1);
+        const parallaxX = pointer.x * MathUtils.lerp(0.04, 0.15, depthWeight);
+        const parallaxY = -pointer.y * MathUtils.lerp(0.02, 0.08, depthWeight);
+        const burstWave = Math.exp(-Math.abs(t - signal.burstPhase) * 15) * burst;
+        const scale = MathUtils.lerp(0.014, 0.026, 0.4 + burstWave);
+
+        helperB.position.set(point.x + parallaxX, point.y + parallaxY, point.z);
+        helperB.scale.setScalar(scale);
+        helperB.quaternion.identity();
+        helperB.updateMatrix();
+        flow.setMatrixAt(index, helperB.matrix);
+      }
+
+      tube.instanceMatrix.needsUpdate = true;
+      sheath.instanceMatrix.needsUpdate = true;
+      node.instanceMatrix.needsUpdate = true;
+      flow.instanceMatrix.needsUpdate = true;
+    }
+
+    const glow = (0.2 + signal.pulse * 0.4 + signal.burst * 0.55) * visibility;
+    const leftTubeMaterial = leftTube.material as MeshStandardMaterial;
+    const rightTubeMaterial = rightTube.material as MeshStandardMaterial;
+    const leftSheathMaterial = leftSheath.material as MeshStandardMaterial;
+    const rightSheathMaterial = rightSheath.material as MeshStandardMaterial;
+    const leftNodeMaterial = leftNode.material as MeshStandardMaterial;
+    const rightNodeMaterial = rightNode.material as MeshStandardMaterial;
+    const leftFlowMaterial = leftFlow.material as MeshStandardMaterial;
+    const rightFlowMaterial = rightFlow.material as MeshStandardMaterial;
+    sampleBioGradient(gradientColor, signal.colorPhase + elapsed * 0.08);
+
+    leftTubeMaterial.color.copy(accentPrimary).lerp(gradientColor, 0.38);
+    rightTubeMaterial.color.copy(accentSecondary).lerp(gradientColor, 0.34);
+    leftTubeMaterial.emissive.copy(leftTubeMaterial.color);
+    rightTubeMaterial.emissive.copy(rightTubeMaterial.color);
+    leftTubeMaterial.opacity = MathUtils.lerp(0.28, 0.44, grade.trailOpacityHigh + signal.activity * 0.2) * visibility;
+    rightTubeMaterial.opacity = MathUtils.lerp(0.26, 0.42, grade.trailOpacityHigh + signal.activity * 0.2) * visibility;
+    leftTubeMaterial.emissiveIntensity = glow;
+    rightTubeMaterial.emissiveIntensity = glow * 0.95;
+
+    leftSheathMaterial.color.copy(gradientColor).lerp(accentPrimary, 0.22);
+    rightSheathMaterial.color.copy(gradientColor).lerp(accentSecondary, 0.22);
+    leftSheathMaterial.emissive.copy(leftSheathMaterial.color);
+    rightSheathMaterial.emissive.copy(rightSheathMaterial.color);
+    leftSheathMaterial.opacity = (0.08 + signal.activity * 0.12 + signal.burst * 0.14) * visibility;
+    rightSheathMaterial.opacity = (0.08 + signal.activity * 0.12 + signal.burst * 0.14) * visibility;
+    leftSheathMaterial.emissiveIntensity = (0.34 + signal.activity * 0.8 + signal.burst * 1.1) * visibility;
+    rightSheathMaterial.emissiveIntensity = (0.34 + signal.activity * 0.8 + signal.burst * 1.1) * visibility;
+
+    leftNodeMaterial.color.copy(gradientColor).lerp(accentPrimary, 0.28);
+    rightNodeMaterial.color.copy(gradientColor).lerp(accentSecondary, 0.28);
+    leftNodeMaterial.emissive.copy(leftNodeMaterial.color);
+    rightNodeMaterial.emissive.copy(rightNodeMaterial.color);
+    leftNodeMaterial.opacity = 0.84 * visibility;
+    rightNodeMaterial.opacity = 0.84 * visibility;
+    leftNodeMaterial.emissiveIntensity = (0.5 + signal.pulse * 0.9 + signal.burst * 1.3) * visibility;
+    rightNodeMaterial.emissiveIntensity = (0.48 + signal.pulse * 0.88 + signal.burst * 1.28) * visibility;
+
+    leftFlowMaterial.color.copy(accentPrimary).lerp(gradientColor, 0.5);
+    rightFlowMaterial.color.copy(accentSecondary).lerp(gradientColor, 0.5);
+    leftFlowMaterial.emissive.copy(leftFlowMaterial.color);
+    rightFlowMaterial.emissive.copy(rightFlowMaterial.color);
+    leftFlowMaterial.opacity = 0.7 * visibility;
+    rightFlowMaterial.opacity = 0.7 * visibility;
+    leftFlowMaterial.emissiveIntensity = (0.72 + signal.activity * 1.1 + signal.burst * 1.6) * visibility;
+    rightFlowMaterial.emissiveIntensity = (0.7 + signal.activity * 1.1 + signal.burst * 1.6) * visibility;
   });
 
   return (
-    <group ref={railRef}>
-      {railPoints.map((pts, i) => (
-        <group key={i}>
-          <Line
-            points={pts}
-            color={grade.trailPrimary}
-            lineWidth={1.0}
-            transparent
-            opacity={0.12}
-            blending={AdditiveBlending}
-          />
-          <Line
-            points={pts}
-            color={grade.trailSecondary}
-            lineWidth={2.8}
-            transparent
-            opacity={0.04}
-            blending={AdditiveBlending}
-          />
+    <group>
+      <instancedMesh ref={leftTubeRef} args={[undefined, undefined, tubeCount]} frustumCulled={false}>
+        <cylinderGeometry args={[1, 1, 1, 10, 1, true]} />
+        <meshPhysicalMaterial
+          color={palette.accent}
+          emissive={palette.accent}
+          transparent
+          opacity={0.36}
+          roughness={0.14}
+          metalness={0.16}
+          transmission={0.28}
+          thickness={0.18}
+          clearcoat={1}
+          clearcoatRoughness={0.12}
+          emissiveIntensity={0.34}
+          depthWrite={false}
+          blending={AdditiveBlending}
+        />
+      </instancedMesh>
+      <instancedMesh ref={rightTubeRef} args={[undefined, undefined, tubeCount]} frustumCulled={false}>
+        <cylinderGeometry args={[1, 1, 1, 10, 1, true]} />
+        <meshPhysicalMaterial
+          color={palette.accent2}
+          emissive={palette.accent2}
+          transparent
+          opacity={0.34}
+          roughness={0.14}
+          metalness={0.16}
+          transmission={0.28}
+          thickness={0.18}
+          clearcoat={1}
+          clearcoatRoughness={0.12}
+          emissiveIntensity={0.33}
+          depthWrite={false}
+          blending={AdditiveBlending}
+        />
+      </instancedMesh>
+      <instancedMesh ref={leftSheathRef} args={[undefined, undefined, tubeCount]} frustumCulled={false}>
+        <cylinderGeometry args={[1, 1, 1, 8, 1, true]} />
+        <meshStandardMaterial
+          color={palette.accent}
+          emissive={palette.accent}
+          transparent
+          opacity={0.14}
+          roughness={0.26}
+          metalness={0.06}
+          emissiveIntensity={0.38}
+          depthWrite={false}
+          blending={AdditiveBlending}
+        />
+      </instancedMesh>
+      <instancedMesh ref={rightSheathRef} args={[undefined, undefined, tubeCount]} frustumCulled={false}>
+        <cylinderGeometry args={[1, 1, 1, 8, 1, true]} />
+        <meshStandardMaterial
+          color={palette.accent2}
+          emissive={palette.accent2}
+          transparent
+          opacity={0.14}
+          roughness={0.26}
+          metalness={0.06}
+          emissiveIntensity={0.38}
+          depthWrite={false}
+          blending={AdditiveBlending}
+        />
+      </instancedMesh>
+      <instancedMesh ref={leftNodeRef} args={[undefined, undefined, nodeCount]} frustumCulled={false}>
+        <sphereGeometry args={[1, 12, 12]} />
+        <meshPhysicalMaterial color={palette.accent} emissive={palette.accent} transparent opacity={0.84} roughness={0.08} metalness={0.14} transmission={0.3} clearcoat={1} clearcoatRoughness={0.1} />
+      </instancedMesh>
+      <instancedMesh ref={rightNodeRef} args={[undefined, undefined, nodeCount]} frustumCulled={false}>
+        <sphereGeometry args={[1, 12, 12]} />
+        <meshPhysicalMaterial color={palette.accent2} emissive={palette.accent2} transparent opacity={0.84} roughness={0.08} metalness={0.14} transmission={0.3} clearcoat={1} clearcoatRoughness={0.1} />
+      </instancedMesh>
+      <instancedMesh ref={leftFlowRef} args={[undefined, undefined, flowCount]} frustumCulled={false}>
+        <sphereGeometry args={[1, 10, 10]} />
+        <meshStandardMaterial color={palette.accent} emissive={palette.accent} transparent opacity={0.7} roughness={0.1} metalness={0.06} depthWrite={false} blending={AdditiveBlending} />
+      </instancedMesh>
+      <instancedMesh ref={rightFlowRef} args={[undefined, undefined, flowCount]} frustumCulled={false}>
+        <sphereGeometry args={[1, 10, 10]} />
+        <meshStandardMaterial color={palette.accent2} emissive={palette.accent2} transparent opacity={0.7} roughness={0.1} metalness={0.06} depthWrite={false} blending={AdditiveBlending} />
+      </instancedMesh>
+    </group>
+  );
+}
+
+function DnaBasePairs({
+  pointerRef,
+  profile,
+  palette,
+  grade,
+  activityRef,
+}: {
+  pointerRef: MutableRefObject<{ x: number; y: number }>;
+  profile: ThemeMotionProfile;
+  palette: ThemePalette;
+  grade: ThemeColorGrade;
+  activityRef: MutableRefObject<DnaActivitySignal>;
+}) {
+  const pairCount = DNA_VISUAL_CONFIG.pairCount;
+  const pairRefs = useRef<Array<Group | null>>([]);
+  const left = useMemo(() => new Vector3(), []);
+  const right = useMemo(() => new Vector3(), []);
+  const direction = useMemo(() => new Vector3(), []);
+  const xAxis = useMemo(() => new Vector3(1, 0, 0), []);
+  const targetQuat = useMemo(() => new Quaternion(), []);
+  const pairColorStops = useMemo(() => {
+    const c1 = new Color(palette.accent);
+    const c2 = new Color(palette.accent2);
+    return Array.from({ length: pairCount }, (_, index) => {
+      const t = index / Math.max(1, pairCount - 1);
+      return c1.clone().lerp(c2, t * 0.9 + 0.05);
+    });
+  }, [palette.accent, palette.accent2, pairCount]);
+  const pairHighlight = useMemo(() => new Color(palette.foreground), [palette.foreground]);
+
+  const pairSeeds = useMemo(() => {
+    return Array.from({ length: pairCount }, (_, index) => ({
+      phase: index * 0.47 + pseudoRandom(index + 11.3) * 1.4,
+      drift: pseudoRandom(index + 21.7) * 0.03 + 0.015,
+    }));
+  }, [pairCount]);
+
+  useFrame((state, delta) => {
+    const elapsed = state.clock.getElapsedTime();
+    const pointer = pointerRef.current;
+    const signal = activityRef.current;
+    const sceneVisibility = signal.visibility;
+
+    for (let index = 0; index < pairCount; index += 1) {
+      const group = pairRefs.current[index];
+      if (!group) {
+        continue;
+      }
+
+      const seed = pairSeeds[index];
+      const t = (index / pairCount + Math.sin(elapsed * seed.drift + seed.phase) * 0.008 + 1) % 1;
+
+      sampleHelixPosition(left, t, 0, elapsed, 1.02, profile, seed.phase, signal.activity, 0.2 + signal.pulse * 0.4);
+      sampleHelixPosition(right, t, 1, elapsed, 1.02, profile, seed.phase, signal.activity, 0.2 + signal.pulse * 0.4);
+
+      const depthWeight = clamp(((left.z + right.z) * 0.5 + 1.2) / 2.4, 0, 1);
+      const parallaxX = pointer.x * MathUtils.lerp(0.04, 0.17, depthWeight);
+      const parallaxY = -pointer.y * MathUtils.lerp(0.025, 0.09, depthWeight);
+      const centerFalloff = 1 - Math.min(1, Math.abs((left.y + right.y) * 0.5) / 3.9);
+      const spherePull = centerFalloff * (0.07 + signal.pulse * 0.28);
+
+      const targetX = (left.x + right.x) * 0.5 + parallaxX - ((left.x + right.x) * 0.5) * spherePull;
+      const targetY = (left.y + right.y) * 0.5 + parallaxY;
+      const targetZ = (left.z + right.z) * 0.5 - ((left.z + right.z) * 0.5) * spherePull * 0.6;
+      group.position.x = MathUtils.damp(group.position.x, targetX, 8, delta);
+      group.position.y = MathUtils.damp(group.position.y, targetY, 8, delta);
+      group.position.z = MathUtils.damp(group.position.z, targetZ, 8, delta);
+
+      direction.copy(right).sub(left);
+      const length = Math.max(0.14, direction.length());
+      targetQuat.setFromUnitVectors(xAxis, direction.normalize());
+      group.quaternion.slerp(targetQuat, 1 - Math.exp(-delta * 9));
+
+      const pulse = (Math.sin(elapsed * (1.15 + profile.motionIntensity * 0.28) + seed.phase) + 1) * 0.5;
+      const burstWave = Math.exp(-Math.abs(t - signal.burstPhase) * 13) * signal.burst;
+      const response = clamp(pulse * 0.7 + burstWave * 1.15 + signal.pulse * 0.45, 0, 1.8);
+      const thickness = MathUtils.lerp(0.01, 0.036, response);
+
+      const rod = group.children[0] as Mesh;
+      const startCap = group.children[1] as Mesh;
+      const endCap = group.children[2] as Mesh;
+
+      rod.scale.set(length, thickness, thickness);
+      startCap.position.set(-length * 0.5, 0, 0);
+      endCap.position.set(length * 0.5, 0, 0);
+
+      const rodMaterial = rod.material as MeshStandardMaterial;
+      const capStartMaterial = startCap.material as MeshStandardMaterial;
+      const capEndMaterial = endCap.material as MeshStandardMaterial;
+      const emissiveStrength = MathUtils.lerp(0.18, 0.84, response);
+      const phaseTint = pairColorStops[index];
+      sampleBioGradient(rodMaterial.color, signal.colorPhase + t * 1.4);
+      rodMaterial.color.lerp(phaseTint, 0.4);
+      rodMaterial.emissive.copy(phaseTint);
+      capStartMaterial.color.copy(phaseTint).lerp(pairHighlight, 0.2 + signal.pulse * 0.14);
+      capEndMaterial.color.copy(phaseTint).lerp(pairHighlight, 0.2 + signal.pulse * 0.14);
+      capStartMaterial.emissive.copy(capStartMaterial.color);
+      capEndMaterial.emissive.copy(capEndMaterial.color);
+      rodMaterial.emissiveIntensity = emissiveStrength * sceneVisibility;
+      capStartMaterial.emissiveIntensity = emissiveStrength * 1.1 * sceneVisibility;
+      capEndMaterial.emissiveIntensity = emissiveStrength * 1.1 * sceneVisibility;
+      rodMaterial.opacity = MathUtils.lerp(0.34, 0.66, clamp(response * 0.7, 0, 1)) * sceneVisibility;
+      capStartMaterial.opacity = 0.8 * sceneVisibility;
+      capEndMaterial.opacity = 0.8 * sceneVisibility;
+
+      const dynamicConnection = 0.6 + Math.sin(elapsed * (0.22 + seed.drift) + seed.phase) * 0.2;
+      const connectionStrength = clamp(dynamicConnection + signal.activity * 0.2 + burstWave * 0.5, 0.3, 1.2) * sceneVisibility;
+      group.scale.y = MathUtils.damp(group.scale.y, connectionStrength, 7.2, delta);
+      group.scale.z = MathUtils.damp(group.scale.z, connectionStrength, 7.2, delta);
+    }
+  });
+
+  return (
+    <group>
+      {Array.from({ length: pairCount }, (_, index) => (
+        <group key={`dna-pair-${index}`} ref={(node) => { pairRefs.current[index] = node; }}>
+          <mesh>
+            <boxGeometry args={[1, 1, 1]} />
+            <meshStandardMaterial
+              color={grade.edgeTint}
+              transparent
+              opacity={0.46}
+              roughness={0.26}
+              metalness={0.18}
+              emissive={grade.edgeTint}
+              emissiveIntensity={0.34}
+            />
+          </mesh>
+          <mesh>
+            <sphereGeometry args={[0.04, 10, 10]} />
+            <meshStandardMaterial
+              color={palette.accent}
+              emissive={palette.accent}
+              emissiveIntensity={0.38}
+              transparent
+              opacity={0.8}
+              roughness={0.16}
+              metalness={0.12}
+            />
+          </mesh>
+          <mesh>
+            <sphereGeometry args={[0.04, 10, 10]} />
+            <meshStandardMaterial
+              color={palette.accent2}
+              emissive={palette.accent2}
+              emissiveIntensity={0.38}
+              transparent
+              opacity={0.8}
+              roughness={0.16}
+              metalness={0.12}
+            />
+          </mesh>
         </group>
       ))}
     </group>
   );
 }
 
-function TrailParticles({ count, phaseOffset, color, pointerRef, profile, layerOffset, scrollProgressRef, lowOpacity, highOpacity }: TrailParticlesProps) {
-  const attributeRef = useRef<BufferAttribute>(null);
+function DnaFlowParticles({
+  pointerRef,
+  profile,
+  palette,
+  grade,
+  activityRef,
+}: {
+  pointerRef: MutableRefObject<{ x: number; y: number }>;
+  profile: ThemeMotionProfile;
+  palette: ThemePalette;
+  grade: ThemeColorGrade;
+  activityRef: MutableRefObject<DnaActivitySignal>;
+}) {
+  const count = DNA_VISUAL_CONFIG.flowCount + 34;
+  const positionRef = useRef<BufferAttribute>(null);
   const materialRef = useRef<PointsMaterial>(null);
   const positions = useMemo(() => new Float32Array(count * 3), [count]);
+  const sample = useMemo(() => new Vector3(), []);
 
   const seeds = useMemo(() => {
     return Array.from({ length: count }, (_, index) => {
-      const ratio = index / Math.max(1, count - 1);
+      const r1 = pseudoRandom(index + 3.4);
+      const r2 = pseudoRandom(index + 8.7);
+      const r3 = pseudoRandom(index + 15.1);
+      const r4 = pseudoRandom(index + 21.9);
+      const r5 = pseudoRandom(index + 29.3);
+      const r6 = pseudoRandom(index + 39.8);
+      const r7 = pseudoRandom(index + 43.6);
       return {
-        phase: ratio * Math.PI * 2,
-        radius: MathUtils.lerp(0.08, 0.5, ratio) * profile.particleSpread,
-        lane: MathUtils.lerp(-0.1, -0.95, ratio) * profile.weight,
-        wobble: MathUtils.lerp(0.35, 1.4, ratio),
+        phase: r1 * Math.PI * 2,
+        speed: r2 > 0.25 ? MathUtils.lerp(0.04, 0.1, r3) : -MathUtils.lerp(0.03, 0.08, r3),
+        radiusOffset: MathUtils.lerp(-0.22, 0.18, r4),
+        lane: (r5 > 0.5 ? 0 : 1) as 0 | 1,
+        jitter: MathUtils.lerp(-0.08, 0.08, pseudoRandom(index + 34.8)),
+        orbit: r6 > 0.74,
+        orbitRadius: MathUtils.lerp(0.62, 1.44, r7),
+        absorbPhase: pseudoRandom(index + 53.7),
       };
     });
-  }, [count, profile.particleSpread, profile.weight]);
+  }, [count]);
 
   useFrame((state) => {
-    const attribute = attributeRef.current;
-    const material = materialRef.current;
-
-    if (!attribute || !material) {
+    const attribute = positionRef.current;
+    if (!attribute) {
       return;
     }
 
-    const array = attribute.array as Float32Array;
     const elapsed = state.clock.getElapsedTime();
-    const pointerState = pointerRef.current;
-    const scrollProgress = scrollProgressRef.current;
+    const pointer = pointerRef.current;
+    const signal = activityRef.current;
+    const visibility = signal.visibility;
+    const array = attribute.array as Float32Array;
 
     for (let index = 0; index < count; index += 1) {
       const seed = seeds[index];
-      const swirl = elapsed * profile.particleSpeed * seed.wobble + seed.phase + phaseOffset + layerOffset;
-      const spread = seed.radius;
+      if (seed.orbit) {
+        const orbitTurn = elapsed * (0.24 + Math.abs(seed.speed)) + seed.phase;
+        const absorbCycle = (elapsed * 0.09 + seed.absorbPhase) % 1;
+        const absorbStrength = smoothstep(0.68, 0.93, absorbCycle);
+        const radius = MathUtils.lerp(seed.orbitRadius, 0.16, absorbStrength);
+        const orbitY = Math.sin(orbitTurn * 1.8 + seed.phase) * 0.44 + seed.jitter * 0.2;
+        array[index * 3] = Math.cos(orbitTurn) * radius + pointer.x * 0.04;
+        array[index * 3 + 1] = orbitY - pointer.y * 0.04;
+        array[index * 3 + 2] = Math.sin(orbitTurn * 1.3 + seed.phase) * radius * 0.8;
+        continue;
+      }
 
-      array[index * 3] = Math.cos(swirl) * spread + pointerState.x * 0.07 * profile.motionIntensity;
-      array[index * 3 + 1] = Math.sin(swirl * 1.35) * spread * 0.45 - pointerState.y * 0.04 * profile.motionIntensity;
-      array[index * 3 + 2] = seed.lane + Math.sin(swirl * 1.85 + phaseOffset) * 0.05;
+      const burstBoost = signal.burst > 0.12 ? Math.sign(seed.speed) * signal.burst * 0.45 : 0;
+      const direction = signal.flowDirection > 0 ? 1 : -1;
+      const t = ((seed.phase + elapsed * (seed.speed * direction + burstBoost)) % 1 + 1) % 1;
+      const point = sampleHelixPosition(sample, t, seed.lane, elapsed, 0.72 + seed.radiusOffset, profile, seed.phase, signal.activity, 0.18 + signal.pulse * 0.45);
+      const depthWeight = clamp((point.z + 1.15) / 2.3, 0, 1);
+      const parallaxX = pointer.x * MathUtils.lerp(0.02, 0.12, depthWeight);
+      const parallaxY = -pointer.y * MathUtils.lerp(0.015, 0.06, depthWeight);
+
+      array[index * 3] = point.x + parallaxX + Math.sin(elapsed * 1.8 + seed.phase) * 0.02;
+      array[index * 3 + 1] = point.y + parallaxY + seed.jitter;
+      array[index * 3 + 2] = point.z + Math.cos(elapsed * 1.4 + seed.phase) * 0.035;
     }
 
-    const enterCurve = smoothstep(0.02, 0.24, scrollProgress);
-    const exitCurve = 1 - smoothstep(0.76, 1, scrollProgress);
-    const densityCurve = clamp((enterCurve * exitCurve) + profile.densityBias, 0.08, profile.densityCeiling);
-    const pulse = (Math.sin(elapsed * (1.2 + profile.motionIntensity * 0.36) + phaseOffset) + 1) * 0.5;
+    attribute.needsUpdate = true;
 
-    material.opacity = MathUtils.lerp(lowOpacity, highOpacity, densityCurve) * MathUtils.lerp(0.82, 1.12, pulse);
+    const material = materialRef.current;
+    if (material) {
+      const breathe = (Math.sin(elapsed * 0.7) + 1) * 0.5;
+      material.opacity = MathUtils.lerp(0.2, 0.48, breathe + signal.activity * 0.25 + signal.burst * 0.35) * MathUtils.lerp(0.9, 1.06, grade.trailOpacityHigh) * visibility;
+    }
+  });
+
+  return (
+    <points>
+      <bufferGeometry>
+        <bufferAttribute ref={positionRef} attach="attributes-position" args={[positions, 3]} />
+      </bufferGeometry>
+      <pointsMaterial
+        ref={materialRef}
+        color={palette.foreground}
+        size={0.062}
+        sizeAttenuation
+        depthWrite={false}
+        blending={AdditiveBlending}
+        transparent
+        opacity={0.4}
+      />
+    </points>
+  );
+}
+
+function DnaSphereLinks({
+  pointerRef,
+  profile,
+  palette,
+  activityRef,
+}: {
+  pointerRef: MutableRefObject<{ x: number; y: number }>;
+  profile: ThemeMotionProfile;
+  palette: ThemePalette;
+  activityRef: MutableRefObject<DnaActivitySignal>;
+}) {
+  const linkCount = 8;
+  const linkRefs = useRef<Array<Group | null>>([]);
+  const seeds = useMemo(
+    () =>
+      Array.from({ length: linkCount }, (_, index) => ({
+        side: (index % 2) as 0 | 1,
+        t: MathUtils.lerp(0.18, 0.82, pseudoRandom(index + 201.4)),
+        offset: pseudoRandom(index + 213.2) * Math.PI * 2,
+        speed: MathUtils.lerp(0.4, 0.9, pseudoRandom(index + 221.1)),
+      })),
+    [linkCount]
+  );
+  const left = useMemo(() => new Vector3(), []);
+  const right = useMemo(() => new Vector3(), []);
+  const direction = useMemo(() => new Vector3(), []);
+  const yAxis = useMemo(() => new Vector3(0, 1, 0), []);
+  const targetQuat = useMemo(() => new Quaternion(), []);
+  const bridgeColor = useMemo(() => new Color(), []);
+  const accentColor = useMemo(() => new Color(palette.accent), [palette.accent]);
+  const accent2Color = useMemo(() => new Color(palette.accent2), [palette.accent2]);
+
+  useFrame((state, delta) => {
+    const elapsed = state.clock.getElapsedTime();
+    const pointer = pointerRef.current;
+    const signal = activityRef.current;
+    const visibility = signal.visibility;
+
+    for (let index = 0; index < linkCount; index += 1) {
+      const group = linkRefs.current[index];
+      if (!group) {
+        continue;
+      }
+
+      const seed = seeds[index];
+      const anchorT = (seed.t + Math.sin(elapsed * 0.16 + seed.offset) * 0.012 + 1) % 1;
+      sampleHelixPosition(left, anchorT, seed.side, elapsed, 1.02, profile, seed.offset, signal.activity, 0.22 + signal.pulse * 0.46);
+
+      const sphereAngle = elapsed * 0.23 * (seed.side === 0 ? 1 : -1) + seed.offset;
+      right.set(
+        Math.cos(sphereAngle) * 0.42,
+        Math.sin(elapsed * 0.35 + seed.offset) * 0.36,
+        Math.sin(sphereAngle) * 0.34
+      );
+
+      const depthWeight = clamp((left.z + 1.2) / 2.4, 0, 1);
+      const parallaxX = pointer.x * MathUtils.lerp(0.03, 0.11, depthWeight);
+      const parallaxY = -pointer.y * MathUtils.lerp(0.02, 0.07, depthWeight);
+
+      direction.copy(left).sub(right);
+      const length = Math.max(0.1, direction.length());
+      targetQuat.setFromUnitVectors(yAxis, direction.normalize());
+      group.position.x = MathUtils.damp(group.position.x, (left.x + right.x) * 0.5 + parallaxX, 7.8, delta);
+      group.position.y = MathUtils.damp(group.position.y, (left.y + right.y) * 0.5 + parallaxY, 7.8, delta);
+      group.position.z = MathUtils.damp(group.position.z, (left.z + right.z) * 0.5, 7.8, delta);
+      group.quaternion.slerp(targetQuat, 1 - Math.exp(-delta * 10));
+
+      const rod = group.children[0] as Mesh;
+      const pulse = group.children[1] as Mesh;
+      const rodMaterial = rod.material as MeshStandardMaterial;
+      const pulseMaterial = pulse.material as MeshStandardMaterial;
+      const propagation = Math.exp(-Math.abs(anchorT - signal.burstPhase) * 14) * signal.burst;
+      const oscillation = (Math.sin(elapsed * seed.speed + seed.offset) + 1) * 0.5;
+      const response = clamp(oscillation * 0.6 + signal.pulse * 0.5 + propagation, 0, 1.8);
+      sampleBioGradient(bridgeColor, signal.colorPhase + anchorT * 1.6);
+
+      const rodRadius = MathUtils.lerp(0.006, 0.026, response);
+      rod.scale.set(rodRadius, length, rodRadius);
+      rodMaterial.color.copy(bridgeColor).lerp(accentColor, 0.32);
+      rodMaterial.emissive.copy(rodMaterial.color);
+      rodMaterial.opacity = MathUtils.lerp(0.24, 0.68, response) * visibility;
+      rodMaterial.emissiveIntensity = MathUtils.lerp(0.2, 1.1, response) * visibility;
+
+      const travel = ((elapsed * 0.2 * (signal.flowDirection > 0 ? 1 : -1) + seed.offset / Math.PI) % 1 + 1) % 1;
+      pulse.position.x = MathUtils.lerp(-length * 0.5, length * 0.5, travel);
+      pulse.scale.setScalar(MathUtils.lerp(0.02, 0.045, response));
+      pulseMaterial.color.copy(bridgeColor).lerp(accent2Color, 0.26);
+      pulseMaterial.emissive.copy(pulseMaterial.color);
+      pulseMaterial.opacity = 0.9 * visibility;
+      pulseMaterial.emissiveIntensity = (0.6 + response * 1.2) * visibility;
+    }
+  });
+
+  return (
+    <group>
+      {Array.from({ length: linkCount }, (_, index) => (
+        <group key={`dna-link-${index}`} ref={(node) => { linkRefs.current[index] = node; }}>
+          <mesh>
+            <cylinderGeometry args={[1, 1, 1, 8, 1, true]} />
+            <meshStandardMaterial
+              color={palette.accent}
+              emissive={palette.accent2}
+              transparent
+              opacity={0.42}
+              roughness={0.18}
+              metalness={0.06}
+              depthWrite={false}
+              blending={AdditiveBlending}
+            />
+          </mesh>
+          <mesh>
+            <sphereGeometry args={[1, 10, 10]} />
+            <meshStandardMaterial color={palette.accent2} emissive={palette.accent2} emissiveIntensity={0.8} transparent opacity={0.9} roughness={0.1} metalness={0.08} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function DnaCoreSphere({
+  palette,
+  profile,
+  activityRef,
+}: {
+  palette: ThemePalette;
+  profile: ThemeMotionProfile;
+  activityRef: MutableRefObject<DnaActivitySignal>;
+}) {
+  const groupRef = useRef<Group>(null);
+  const innerRef = useRef<Mesh>(null);
+  const shellRef = useRef<Mesh>(null);
+  const shellOuterRef = useRef<Mesh>(null);
+  const swirlRef = useRef<Mesh>(null);
+  const crownRef = useRef<Mesh>(null);
+  const auraRef = useRef<Mesh>(null);
+  const pulseLightRef = useRef<Object3D>(null);
+  const rimLightRef = useRef<Object3D>(null);
+  const tmpColor = useMemo(() => new Color(), []);
+  const accentColor = useMemo(() => new Color(palette.accent), [palette.accent]);
+  const accent2Color = useMemo(() => new Color(palette.accent2), [palette.accent2]);
+  const foregroundColor = useMemo(() => new Color(palette.foreground), [palette.foreground]);
+
+  useFrame((state, delta) => {
+    const group = groupRef.current;
+    const inner = innerRef.current;
+    const shell = shellRef.current;
+    const shellOuter = shellOuterRef.current;
+    const swirl = swirlRef.current;
+    const crown = crownRef.current;
+    const aura = auraRef.current;
+    const pulseLight = pulseLightRef.current as { intensity?: number } | null;
+    const rimLight = rimLightRef.current as { intensity?: number } | null;
+    if (!group || !inner || !shell || !shellOuter || !swirl || !crown || !aura) {
+      return;
+    }
+
+    const elapsed = state.clock.getElapsedTime();
+    const signal = activityRef.current;
+    const pulse = signal.pulse;
+    const burst = signal.burst;
+    const activity = signal.activity;
+    const visibility = signal.visibility;
+
+    group.rotation.y = MathUtils.damp(group.rotation.y, elapsed * 0.22, 2.4, delta);
+    group.rotation.x = MathUtils.damp(group.rotation.x, Math.sin(elapsed * 0.2) * 0.12, 2.2, delta);
+    swirl.rotation.y = MathUtils.damp(swirl.rotation.y, -elapsed * (0.65 + profile.motionIntensity * 0.16), 4, delta);
+    swirl.rotation.z = MathUtils.damp(swirl.rotation.z, elapsed * 0.24, 3.4, delta);
+    crown.rotation.x = MathUtils.damp(crown.rotation.x, Math.sin(elapsed * 0.34) * 0.2, 2.8, delta);
+    crown.rotation.y = MathUtils.damp(crown.rotation.y, elapsed * 0.48, 3.1, delta);
+
+    const innerMaterial = inner.material as MeshStandardMaterial;
+    const shellMaterial = shell.material as MeshStandardMaterial;
+    const shellOuterMaterial = shellOuter.material as MeshStandardMaterial;
+    const swirlMaterial = swirl.material as MeshStandardMaterial;
+    const crownMaterial = crown.material as MeshStandardMaterial;
+    const auraMaterial = aura.material as MeshStandardMaterial;
+
+    sampleBioGradient(tmpColor, signal.colorPhase + elapsed * 0.09);
+    innerMaterial.color.copy(tmpColor).lerp(accentColor, 0.3);
+    shellMaterial.color.copy(foregroundColor).lerp(tmpColor, 0.35);
+    shellOuterMaterial.color.copy(tmpColor).lerp(foregroundColor, 0.42);
+    swirlMaterial.color.copy(accent2Color).lerp(tmpColor, 0.45);
+    crownMaterial.color.copy(tmpColor).lerp(accentColor, 0.36);
+    auraMaterial.color.copy(tmpColor).lerp(accentColor, 0.5);
+
+    innerMaterial.emissive.copy(innerMaterial.color);
+    shellMaterial.emissive.copy(shellMaterial.color);
+    shellOuterMaterial.emissive.copy(shellOuterMaterial.color);
+    swirlMaterial.emissive.copy(swirlMaterial.color);
+    crownMaterial.emissive.copy(crownMaterial.color);
+    auraMaterial.emissive.copy(auraMaterial.color);
+
+    innerMaterial.emissiveIntensity = (0.9 + pulse * 1.2 + burst * 1.8) * visibility;
+    shellMaterial.emissiveIntensity = (0.24 + pulse * 0.5) * visibility;
+    shellOuterMaterial.emissiveIntensity = (0.22 + pulse * 0.54 + burst * 0.74) * visibility;
+    swirlMaterial.emissiveIntensity = (0.56 + activity * 0.9 + burst * 1.1) * visibility;
+    crownMaterial.emissiveIntensity = (0.46 + activity * 0.8 + burst * 1.36) * visibility;
+    auraMaterial.emissiveIntensity = (0.26 + pulse * 0.64 + burst * 0.9) * visibility;
+
+    shellMaterial.opacity = 0.4 * visibility;
+    shellOuterMaterial.opacity = 0.16 * visibility;
+    swirlMaterial.opacity = 0.52 * visibility;
+    crownMaterial.opacity = 0.22 * visibility;
+    auraMaterial.opacity = 0.2 * visibility;
+
+    inner.scale.x = MathUtils.damp(inner.scale.x, MathUtils.lerp(0.92, 1.14, pulse + burst * 0.35), 4.2, delta);
+    inner.scale.y = MathUtils.damp(inner.scale.y, MathUtils.lerp(0.9, 1.16, pulse + burst * 0.35), 4.2, delta);
+    inner.scale.z = MathUtils.damp(inner.scale.z, MathUtils.lerp(0.9, 1.12, pulse + burst * 0.35), 4.2, delta);
+
+    shell.scale.x = MathUtils.damp(shell.scale.x, MathUtils.lerp(1.08, 1.18, pulse), 3.6, delta);
+    shell.scale.y = MathUtils.damp(shell.scale.y, MathUtils.lerp(1.08, 1.22, pulse), 3.6, delta);
+    shell.scale.z = MathUtils.damp(shell.scale.z, MathUtils.lerp(1.08, 1.2, pulse), 3.6, delta);
+    shellOuter.scale.x = MathUtils.damp(shellOuter.scale.x, MathUtils.lerp(1.18, 1.36, pulse + burst * 0.3), 3.1, delta);
+    shellOuter.scale.y = MathUtils.damp(shellOuter.scale.y, MathUtils.lerp(1.18, 1.38, pulse + burst * 0.3), 3.1, delta);
+    shellOuter.scale.z = MathUtils.damp(shellOuter.scale.z, MathUtils.lerp(1.18, 1.34, pulse + burst * 0.3), 3.1, delta);
+    aura.scale.setScalar(MathUtils.lerp(1.22, 1.46, pulse + burst * 0.35));
+    crown.scale.setScalar(MathUtils.lerp(0.84, 1.05, activity + burst * 0.4));
+
+    if (pulseLight && typeof pulseLight.intensity === "number") {
+      pulseLight.intensity = (1.1 + pulse * 2 + burst * 2.6) * visibility;
+    }
+    if (rimLight && typeof rimLight.intensity === "number") {
+      rimLight.intensity = (0.48 + activity * 0.9 + burst * 1.4) * visibility;
+    }
+  });
+
+  return (
+    <group ref={groupRef}>
+      <mesh ref={innerRef}>
+        <sphereGeometry args={[0.5, 34, 34]} />
+        <meshStandardMaterial color={palette.accent} emissive={palette.accent} roughness={0.14} metalness={0.24} />
+      </mesh>
+      <mesh ref={swirlRef}>
+        <torusKnotGeometry args={[0.28, 0.08, 128, 16, 2, 3]} />
+        <meshStandardMaterial
+          color={palette.accent2}
+          emissive={palette.accent2}
+          emissiveIntensity={0.84}
+          transparent
+          opacity={0.52}
+          roughness={0.16}
+          metalness={0.12}
+          depthWrite={false}
+          blending={AdditiveBlending}
+        />
+      </mesh>
+      <mesh ref={shellRef}>
+        <sphereGeometry args={[0.72, 40, 40]} />
+        <meshPhysicalMaterial
+          color={palette.foreground}
+          emissive={palette.accent}
+          transparent
+          opacity={0.4}
+          roughness={0.05}
+          metalness={0.18}
+          transmission={0.98}
+          ior={1.36}
+          thickness={0.72}
+          attenuationDistance={0.45}
+          attenuationColor={palette.accent}
+          iridescence={0.7}
+          iridescenceIOR={1.18}
+          iridescenceThicknessRange={[120, 420]}
+          clearcoat={1}
+          clearcoatRoughness={0.08}
+        />
+      </mesh>
+      <mesh ref={shellOuterRef}>
+        <sphereGeometry args={[0.78, 34, 34]} />
+        <meshPhysicalMaterial
+          color={palette.foreground}
+          emissive={palette.accent2}
+          transparent
+          opacity={0.16}
+          roughness={0.18}
+          metalness={0.14}
+          transmission={0.9}
+          ior={1.25}
+          thickness={0.38}
+          iridescence={0.92}
+          iridescenceIOR={1.24}
+          iridescenceThicknessRange={[180, 560]}
+          clearcoat={1}
+          clearcoatRoughness={0.1}
+          depthWrite={false}
+        />
+      </mesh>
+      <mesh ref={auraRef}>
+        <sphereGeometry args={[0.94, 28, 28]} />
+        <meshStandardMaterial
+          color={palette.accent}
+          emissive={palette.accent}
+          emissiveIntensity={0.5}
+          transparent
+          opacity={0.2}
+          roughness={0.5}
+          metalness={0.03}
+          blending={AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+      <mesh ref={crownRef}>
+        <icosahedronGeometry args={[0.64, 1]} />
+        <meshStandardMaterial
+          color={palette.accent}
+          emissive={palette.accent}
+          emissiveIntensity={0.75}
+          transparent
+          opacity={0.22}
+          wireframe
+          blending={AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+      <pointLight ref={pulseLightRef} position={[0, 0, 0]} intensity={2.1} color={palette.accent} distance={6.6} decay={2} />
+      <pointLight ref={rimLightRef} position={[0.78, 0.38, 0.64]} intensity={0.62} color={palette.accent2} distance={4.8} decay={2} />
+    </group>
+  );
+}
+
+function DnaCoreOrbitRings({
+  palette,
+  activityRef,
+}: {
+  palette: ThemePalette;
+  activityRef: MutableRefObject<DnaActivitySignal>;
+}) {
+  const groupRef = useRef<Group>(null);
+  const ringARef = useRef<Mesh>(null);
+  const ringBRef = useRef<Mesh>(null);
+  const ringCRef = useRef<Mesh>(null);
+  const colorA = useMemo(() => new Color(), []);
+  const colorB = useMemo(() => new Color(), []);
+  const accentColor = useMemo(() => new Color(palette.accent), [palette.accent]);
+  const accent2Color = useMemo(() => new Color(palette.accent2), [palette.accent2]);
+
+  useFrame((state, delta) => {
+    const group = groupRef.current;
+    const ringA = ringARef.current;
+    const ringB = ringBRef.current;
+    const ringC = ringCRef.current;
+    if (!group || !ringA || !ringB || !ringC) {
+      return;
+    }
+
+    const elapsed = state.clock.getElapsedTime();
+    const signal = activityRef.current;
+    const energy = signal.activity;
+    const visibility = signal.visibility;
+
+    group.rotation.y = MathUtils.damp(group.rotation.y, elapsed * 0.16, 2.2, delta);
+    ringA.rotation.y = MathUtils.damp(ringA.rotation.y, elapsed * 0.38, 3.1, delta);
+    ringB.rotation.y = MathUtils.damp(ringB.rotation.y, -elapsed * 0.31, 3.1, delta);
+    ringC.rotation.z = MathUtils.damp(ringC.rotation.z, elapsed * 0.44, 3.1, delta);
+
+    const matA = ringA.material as MeshStandardMaterial;
+    const matB = ringB.material as MeshStandardMaterial;
+    const matC = ringC.material as MeshStandardMaterial;
+    sampleBioGradient(colorA, signal.colorPhase + elapsed * 0.08);
+    sampleBioGradient(colorB, signal.colorPhase + 1.2 + elapsed * 0.06);
+
+    matA.color.copy(colorA).lerp(accentColor, 0.3);
+    matB.color.copy(colorB).lerp(accent2Color, 0.32);
+    matC.color.copy(colorA).lerp(colorB, 0.5);
+    matA.emissive.copy(matA.color);
+    matB.emissive.copy(matB.color);
+    matC.emissive.copy(matC.color);
+
+    const wave = 0.5 + Math.sin(elapsed * 2.2 + signal.burstPhase * Math.PI * 2) * 0.5;
+    matA.opacity = MathUtils.lerp(0.12, 0.28, wave + energy * 0.35) * visibility;
+    matB.opacity = MathUtils.lerp(0.1, 0.24, wave * 0.8 + energy * 0.28) * visibility;
+    matC.opacity = MathUtils.lerp(0.08, 0.2, wave * 0.7 + energy * 0.24) * visibility;
+    matA.emissiveIntensity = (0.36 + energy * 0.95 + signal.burst * 1.12) * visibility;
+    matB.emissiveIntensity = (0.3 + energy * 0.88 + signal.burst * 1.06) * visibility;
+    matC.emissiveIntensity = (0.26 + energy * 0.8 + signal.burst * 0.92) * visibility;
+
+    ringA.scale.setScalar(MathUtils.lerp(1, 1.14, signal.pulse + signal.burst * 0.25));
+    ringB.scale.setScalar(MathUtils.lerp(0.96, 1.08, signal.pulse + signal.burst * 0.2));
+    ringC.scale.setScalar(MathUtils.lerp(0.92, 1.02, signal.pulse + signal.burst * 0.18));
+  });
+
+  return (
+    <group ref={groupRef}>
+      <mesh ref={ringARef} rotation={[Math.PI * 0.5, 0, 0]}>
+        <torusGeometry args={[1.04, 0.016, 14, 132]} />
+        <meshStandardMaterial transparent opacity={0.2} roughness={0.22} metalness={0.08} blending={AdditiveBlending} depthWrite={false} />
+      </mesh>
+      <mesh ref={ringBRef} rotation={[Math.PI * 0.5, Math.PI * 0.32, Math.PI * 0.12]}>
+        <torusGeometry args={[0.88, 0.013, 14, 112]} />
+        <meshStandardMaterial transparent opacity={0.16} roughness={0.24} metalness={0.08} blending={AdditiveBlending} depthWrite={false} />
+      </mesh>
+      <mesh ref={ringCRef} rotation={[Math.PI * 0.5, -Math.PI * 0.22, -Math.PI * 0.12]}>
+        <torusGeometry args={[0.72, 0.01, 12, 96]} />
+        <meshStandardMaterial transparent opacity={0.12} roughness={0.26} metalness={0.08} blending={AdditiveBlending} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+}
+
+function DnaHelixBorderAura({
+  palette,
+  activityRef,
+}: {
+  palette: ThemePalette;
+  activityRef: MutableRefObject<DnaActivitySignal>;
+}) {
+  const rootRef = useRef<Group>(null);
+  const borderRef = useRef<Mesh>(null);
+  const sweepRef = useRef<Mesh>(null);
+  const innerRef = useRef<Mesh>(null);
+  const cA = useMemo(() => new Color(), []);
+  const cB = useMemo(() => new Color(), []);
+  const accent = useMemo(() => new Color(palette.accent), [palette.accent]);
+  const accent2 = useMemo(() => new Color(palette.accent2), [palette.accent2]);
+
+  useFrame((state, delta) => {
+    const root = rootRef.current;
+    const border = borderRef.current;
+    const sweep = sweepRef.current;
+    const inner = innerRef.current;
+    if (!root || !border || !sweep || !inner) {
+      return;
+    }
+
+    const elapsed = state.clock.getElapsedTime();
+    const signal = activityRef.current;
+    const visibility = signal.visibility;
+
+    root.rotation.z = MathUtils.damp(root.rotation.z, Math.sin(elapsed * 0.18) * 0.09, 2.1, delta);
+    border.rotation.y = MathUtils.damp(border.rotation.y, elapsed * 0.16, 2.8, delta);
+    sweep.rotation.y = MathUtils.damp(sweep.rotation.y, elapsed * 0.52, 3.6, delta);
+    inner.rotation.y = MathUtils.damp(inner.rotation.y, -elapsed * 0.28, 3.2, delta);
+
+    const borderMat = border.material as MeshStandardMaterial;
+    const sweepMat = sweep.material as MeshStandardMaterial;
+    const innerMat = inner.material as MeshStandardMaterial;
+
+    sampleBioGradient(cA, signal.colorPhase + elapsed * 0.05);
+    sampleBioGradient(cB, signal.colorPhase + 1.5 + elapsed * 0.04);
+
+    borderMat.color.copy(cA).lerp(accent, 0.3);
+    sweepMat.color.copy(cB).lerp(accent2, 0.35);
+    innerMat.color.copy(cA).lerp(cB, 0.5);
+    borderMat.emissive.copy(borderMat.color);
+    sweepMat.emissive.copy(sweepMat.color);
+    innerMat.emissive.copy(innerMat.color);
+
+    const energy = signal.activity + signal.burst * 0.5;
+    borderMat.opacity = MathUtils.lerp(0.06, 0.2, signal.pulse + energy * 0.3) * visibility;
+    sweepMat.opacity = MathUtils.lerp(0.08, 0.28, signal.pulse + energy * 0.38) * visibility;
+    innerMat.opacity = MathUtils.lerp(0.04, 0.16, signal.pulse + energy * 0.25) * visibility;
+    borderMat.emissiveIntensity = (0.25 + energy * 0.9) * visibility;
+    sweepMat.emissiveIntensity = (0.36 + energy * 1.1) * visibility;
+    innerMat.emissiveIntensity = (0.2 + energy * 0.7) * visibility;
+  });
+
+  return (
+    <group ref={rootRef} rotation={[Math.PI * 0.5, 0, 0]}>
+      <mesh ref={borderRef} scale={[1, 1.52, 1]}>
+        <torusGeometry args={[2.62, 0.016, 14, 150]} />
+        <meshStandardMaterial transparent opacity={0.14} roughness={0.2} metalness={0.08} blending={AdditiveBlending} depthWrite={false} />
+      </mesh>
+      <mesh ref={innerRef} scale={[1, 1.36, 1]}>
+        <torusGeometry args={[2.44, 0.01, 10, 128]} />
+        <meshStandardMaterial transparent opacity={0.1} roughness={0.24} metalness={0.06} blending={AdditiveBlending} depthWrite={false} />
+      </mesh>
+      <mesh ref={sweepRef} scale={[1, 1.48, 1]}>
+        <torusGeometry args={[2.58, 0.014, 10, 96, Math.PI * 1.16]} />
+        <meshStandardMaterial transparent opacity={0.18} roughness={0.18} metalness={0.08} blending={AdditiveBlending} depthWrite={false} side={DoubleSide} />
+      </mesh>
+    </group>
+  );
+}
+
+function DnaDustField({
+  pointerRef,
+  palette,
+  activityRef,
+}: {
+  pointerRef: MutableRefObject<{ x: number; y: number }>;
+  palette: ThemePalette;
+  activityRef: MutableRefObject<DnaActivitySignal>;
+}) {
+  const count = 54;
+  const attributeRef = useRef<BufferAttribute>(null);
+  const materialRef = useRef<PointsMaterial>(null);
+  const positions = useMemo(() => new Float32Array(count * 3), [count]);
+  const seeds = useMemo(() => {
+    return Array.from({ length: count }, (_, index) => ({
+      angle: pseudoRandom(index + 90.1) * Math.PI * 2,
+      radius: MathUtils.lerp(0.9, 2.2, pseudoRandom(index + 99.7)),
+      y: MathUtils.lerp(-3.2, 3.2, pseudoRandom(index + 111.2)),
+      drift: MathUtils.lerp(0.02, 0.06, pseudoRandom(index + 121.6)),
+      depth: MathUtils.lerp(-1.4, 1.2, pseudoRandom(index + 131.4)),
+    }));
+  }, [count]);
+
+  useFrame((state) => {
+    const attribute = attributeRef.current;
+    if (!attribute) {
+      return;
+    }
+
+    const elapsed = state.clock.getElapsedTime();
+    const pointer = pointerRef.current;
+    const signal = activityRef.current;
+    const array = attribute.array as Float32Array;
+
+    for (let index = 0; index < count; index += 1) {
+      const seed = seeds[index];
+      const driftAngle = seed.angle + elapsed * seed.drift;
+      const depthWeight = clamp((seed.depth + 1.5) / 2.7, 0, 1);
+
+      array[index * 3] = Math.cos(driftAngle) * seed.radius + pointer.x * MathUtils.lerp(0.02, 0.08, depthWeight);
+      array[index * 3 + 1] = seed.y + Math.sin(elapsed * 0.35 + seed.angle) * 0.22;
+      array[index * 3 + 2] = seed.depth + Math.cos(driftAngle * 0.7) * 0.14;
+    }
 
     attribute.needsUpdate = true;
+
+    const material = materialRef.current;
+    if (material) {
+      material.opacity = (0.1 + (Math.sin(elapsed * 0.42) + 1) * 0.06) * signal.visibility;
+    }
   });
 
   return (
@@ -390,25 +1433,306 @@ function TrailParticles({ count, phaseOffset, color, pointerRef, profile, layerO
       </bufferGeometry>
       <pointsMaterial
         ref={materialRef}
-        color={color}
-        size={profile.particleSize}
+        color={palette.accent2}
+        size={0.07}
         sizeAttenuation
-        transparent
-        opacity={highOpacity}
         depthWrite={false}
+        transparent
+        opacity={0.14}
         blending={AdditiveBlending}
       />
     </points>
   );
 }
 
-function CardMesh({ card, index, scrollProgressRef, pointerRef, profile, grade }: CardMeshProps) {
-  const resolvedGrade = grade ?? THEME_COLOR_GRADES.ocean;
+function DnaShadowGradient({
+  profile,
+  palette,
+  pointerRef,
+  activityRef,
+}: {
+  profile: ThemeMotionProfile;
+  palette: ThemePalette;
+  pointerRef: MutableRefObject<{ x: number; y: number }>;
+  activityRef: MutableRefObject<DnaActivitySignal>;
+}) {
+  const shadowCoreRef = useRef<Mesh>(null)
+  const shadowOuterRef = useRef<Mesh>(null)
+  const shadowSweepRef = useRef<Mesh>(null)
+  const tintA = useMemo(() => new Color(palette.accent), [palette.accent])
+  const tintB = useMemo(() => new Color(palette.accent2), [palette.accent2])
+
+  useFrame((state, delta) => {
+    const shadowCore = shadowCoreRef.current
+    const shadowOuter = shadowOuterRef.current
+    const shadowSweep = shadowSweepRef.current
+    if (!shadowCore || !shadowOuter || !shadowSweep) {
+      return
+    }
+
+    const elapsed = state.clock.getElapsedTime()
+    const pointer = pointerRef.current
+    const visibility = activityRef.current.visibility
+    const breathe = (Math.sin(elapsed * (0.35 + profile.motionIntensity * 0.08)) + 1) * 0.5
+    const targetX = pointer.x * 0.22
+    const targetY = -3.46 + Math.sin(elapsed * 0.16) * 0.08
+
+    shadowCore.position.x = MathUtils.damp(shadowCore.position.x, targetX, 2.2, delta)
+    shadowCore.position.y = MathUtils.damp(shadowCore.position.y, targetY, 2.2, delta)
+    shadowOuter.position.x = MathUtils.damp(shadowOuter.position.x, targetX * 0.82, 2, delta)
+    shadowOuter.position.y = MathUtils.damp(shadowOuter.position.y, targetY - 0.04, 2, delta)
+    shadowSweep.position.x = MathUtils.damp(shadowSweep.position.x, targetX * 1.12, 2.2, delta)
+    shadowSweep.position.y = MathUtils.damp(shadowSweep.position.y, targetY + 0.06, 2.2, delta)
+
+    shadowCore.scale.x = MathUtils.damp(shadowCore.scale.x, MathUtils.lerp(2.2, 2.6, breathe), 2.4, delta)
+    shadowCore.scale.y = MathUtils.damp(shadowCore.scale.y, MathUtils.lerp(1.32, 1.56, breathe), 2.4, delta)
+    shadowOuter.scale.x = MathUtils.damp(shadowOuter.scale.x, MathUtils.lerp(2.8, 3.3, breathe), 2.3, delta)
+    shadowOuter.scale.y = MathUtils.damp(shadowOuter.scale.y, MathUtils.lerp(1.7, 2.1, breathe), 2.3, delta)
+    shadowSweep.scale.x = MathUtils.damp(shadowSweep.scale.x, MathUtils.lerp(1.4, 1.9, breathe), 2.8, delta)
+    shadowSweep.scale.y = MathUtils.damp(shadowSweep.scale.y, MathUtils.lerp(0.75, 1.05, breathe), 2.8, delta)
+    shadowSweep.rotation.z = MathUtils.damp(shadowSweep.rotation.z, elapsed * 0.26, 2.8, delta)
+
+    const coreMaterial = shadowCore.material as MeshStandardMaterial
+    const outerMaterial = shadowOuter.material as MeshStandardMaterial
+    const sweepMaterial = shadowSweep.material as MeshStandardMaterial
+
+    coreMaterial.color.copy(tintA).lerp(tintB, 0.36 + breathe * 0.22)
+    outerMaterial.color.copy(tintB).lerp(tintA, 0.28 + breathe * 0.16)
+    sweepMaterial.color.copy(tintA).lerp(tintB, 0.5)
+
+    coreMaterial.opacity = MathUtils.lerp(0.08, 0.18, breathe) * visibility
+    outerMaterial.opacity = MathUtils.lerp(0.04, 0.1, breathe) * visibility
+    sweepMaterial.opacity = MathUtils.lerp(0.06, 0.14, breathe) * visibility
+  })
+
+  return (
+    <group>
+      <mesh ref={shadowOuterRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -3.5, -0.24]}>
+        <circleGeometry args={[1.15, 48]} />
+        <meshStandardMaterial
+          transparent
+          opacity={0.08}
+          roughness={0.92}
+          metalness={0}
+          depthWrite={false}
+          blending={AdditiveBlending}
+          side={DoubleSide}
+        />
+      </mesh>
+      <mesh ref={shadowCoreRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -3.46, -0.2]}>
+        <circleGeometry args={[1.05, 48]} />
+        <meshStandardMaterial
+          transparent
+          opacity={0.14}
+          roughness={0.88}
+          metalness={0}
+          depthWrite={false}
+          blending={AdditiveBlending}
+          side={DoubleSide}
+        />
+      </mesh>
+      <mesh ref={shadowSweepRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -3.4, -0.16]}>
+        <ringGeometry args={[0.52, 0.92, 56, 1, 0, Math.PI * 1.16]} />
+        <meshStandardMaterial
+          transparent
+          opacity={0.1}
+          roughness={0.7}
+          metalness={0}
+          depthWrite={false}
+          blending={AdditiveBlending}
+          side={DoubleSide}
+        />
+      </mesh>
+    </group>
+  )
+}
+
+function DnaHelixSystem({
+  pointerRef,
+  scrollProgressRef,
+  profile,
+  palette,
+  grade,
+}: {
+  pointerRef: MutableRefObject<{ x: number; y: number }>;
+  scrollProgressRef: MutableRefObject<number>;
+  profile: ThemeMotionProfile;
+  palette: ThemePalette;
+  grade: ThemeColorGrade;
+}) {
+  const rootRef = useRef<Group>(null);
+  const backLayerRef = useRef<Group>(null);
+  const midLayerRef = useRef<Group>(null);
+  const foregroundLayerRef = useRef<Group>(null);
+  const glowKeyRef = useRef<Group>(null);
+  const activityRef = useRef<DnaActivitySignal>({
+    pulse: 0,
+    burst: 0,
+    burstPhase: 0,
+    activity: 0,
+    colorPhase: 0,
+    flowDirection: 1,
+    visibility: 1,
+  });
+  const nextBurstAtRef = useRef(0);
+  const burstEndAtRef = useRef(0);
+  const burstStartRef = useRef(0);
+  const keyColorA = useMemo(() => new Color(), []);
+  const keyColorB = useMemo(() => new Color(), []);
+  const accentColor = useMemo(() => new Color(palette.accent), [palette.accent]);
+  const accent2Color = useMemo(() => new Color(palette.accent2), [palette.accent2]);
+
+  useFrame((state, delta) => {
+    const elapsed = state.clock.getElapsedTime();
+    const pointer = pointerRef.current;
+    const scroll = scrollProgressRef.current;
+    const signal = activityRef.current;
+    const visibility = 1 - smoothstep(0.2, 0.82, scroll);
+    signal.visibility = visibility;
+
+    const idlePulse = (Math.sin(elapsed * 0.9) + 1) * 0.5;
+    const secondaryPulse = (Math.sin(elapsed * 0.37 + 1.7) + 1) * 0.5;
+    signal.pulse = clamp(idlePulse * 0.55 + secondaryPulse * 0.45, 0, 1);
+
+    if (elapsed >= nextBurstAtRef.current) {
+      burstStartRef.current = elapsed;
+      burstEndAtRef.current = elapsed + MathUtils.lerp(0.55, 1.2, pseudoRandom(elapsed * 1.71 + 10.4));
+      nextBurstAtRef.current = burstEndAtRef.current + MathUtils.lerp(1.5, 3.6, pseudoRandom(elapsed * 2.13 + 31.8));
+      signal.burstPhase = pseudoRandom(elapsed * 3.17 + 7.2);
+      signal.flowDirection = pseudoRandom(elapsed * 1.22 + 99.3) > 0.56 ? 1 : -1;
+    }
+
+    const inBurst = elapsed < burstEndAtRef.current;
+    if (inBurst) {
+      const burstProgress = clamp((elapsed - burstStartRef.current) / Math.max(0.001, burstEndAtRef.current - burstStartRef.current), 0, 1);
+      signal.burst = Math.sin(Math.PI * burstProgress);
+      signal.burstPhase = (signal.burstPhase + delta * (0.22 + signal.burst * 0.9) * signal.flowDirection + 1) % 1;
+    } else {
+      signal.burst = MathUtils.damp(signal.burst, 0, 5.8, delta);
+    }
+
+    signal.activity = clamp(signal.pulse * 0.55 + signal.burst * 0.95, 0, 1.8);
+    signal.colorPhase = (elapsed * 0.12 + signal.burst * 0.5) % 3;
+
+    if (rootRef.current) {
+      const targetX = DNA_VISUAL_CONFIG.rootX + pointer.x * 0.11;
+      const targetY = DNA_VISUAL_CONFIG.rootY - pointer.y * 0.07 + Math.sin(elapsed * 0.18) * 0.05;
+      rootRef.current.position.x = MathUtils.damp(rootRef.current.position.x, targetX, 3.2, delta);
+      rootRef.current.position.y = MathUtils.damp(rootRef.current.position.y, targetY, 3.2, delta);
+      rootRef.current.rotation.y = MathUtils.damp(rootRef.current.rotation.y, Math.sin(elapsed * 0.16) * 0.04 + pointer.x * 0.045 + signal.burst * 0.06, 2.6, delta);
+      rootRef.current.rotation.x = MathUtils.damp(rootRef.current.rotation.x, pointer.y * 0.026, 2.8, delta);
+      const baseScale = DNA_VISUAL_CONFIG.rootScale * MathUtils.lerp(0.72, 1, visibility);
+      rootRef.current.scale.setScalar(baseScale);
+      rootRef.current.visible = visibility > 0.02;
+    }
+
+    if (backLayerRef.current) {
+      backLayerRef.current.position.x = MathUtils.damp(backLayerRef.current.position.x, pointer.x * 0.05, 2.4, delta);
+      backLayerRef.current.position.y = MathUtils.damp(backLayerRef.current.position.y, -pointer.y * 0.03, 2.4, delta);
+      backLayerRef.current.rotation.z = MathUtils.damp(backLayerRef.current.rotation.z, Math.sin(elapsed * 0.17) * 0.018, 2.4, delta);
+    }
+
+    if (midLayerRef.current) {
+      midLayerRef.current.position.x = MathUtils.damp(midLayerRef.current.position.x, pointer.x * 0.09, 3.1, delta);
+      midLayerRef.current.position.y = MathUtils.damp(midLayerRef.current.position.y, -pointer.y * 0.05, 3.1, delta);
+      midLayerRef.current.rotation.z = MathUtils.damp(midLayerRef.current.rotation.z, Math.sin(elapsed * 0.24) * 0.024, 2.6, delta);
+    }
+
+    if (foregroundLayerRef.current) {
+      foregroundLayerRef.current.position.x = MathUtils.damp(foregroundLayerRef.current.position.x, pointer.x * 0.12, 4.2, delta);
+      foregroundLayerRef.current.position.y = MathUtils.damp(foregroundLayerRef.current.position.y, -pointer.y * 0.07, 4.2, delta);
+      foregroundLayerRef.current.rotation.y = MathUtils.damp(foregroundLayerRef.current.rotation.y, Math.sin(elapsed * 0.28) * 0.03, 2.8, delta);
+      foregroundLayerRef.current.rotation.z = MathUtils.damp(foregroundLayerRef.current.rotation.z, Math.cos(elapsed * 0.21) * 0.02, 2.8, delta);
+    }
+
+    if (glowKeyRef.current) {
+      const breathe = (Math.sin(elapsed * 0.65) + 1) * 0.5;
+      glowKeyRef.current.scale.x = MathUtils.damp(glowKeyRef.current.scale.x, MathUtils.lerp(0.9, 1.08, breathe), 2.8, delta);
+      glowKeyRef.current.scale.y = MathUtils.damp(glowKeyRef.current.scale.y, MathUtils.lerp(0.88, 1.06, breathe), 2.8, delta);
+      glowKeyRef.current.scale.z = MathUtils.damp(glowKeyRef.current.scale.z, 1, 2.8, delta);
+
+      const keyA = glowKeyRef.current.children[0] as { intensity?: number; position?: Vector3; color?: Color };
+      const keyB = glowKeyRef.current.children[1] as { intensity?: number; position?: Vector3; color?: Color };
+      const keyC = glowKeyRef.current.children[2] as { intensity?: number; position?: Vector3; color?: Color };
+      sampleBioGradient(keyColorA, signal.colorPhase + elapsed * 0.07);
+      sampleBioGradient(keyColorB, signal.colorPhase + 1.1 + elapsed * 0.05);
+      if (typeof keyA?.intensity === "number") {
+        keyA.intensity = (0.58 + signal.pulse * 0.7 + signal.burst * 1.1) * visibility;
+      }
+      if (typeof keyB?.intensity === "number") {
+        keyB.intensity = (0.46 + signal.pulse * 0.64 + signal.burst * 1.02) * visibility;
+      }
+      if (typeof keyC?.intensity === "number") {
+        keyC.intensity = (0.34 + signal.pulse * 0.56 + signal.burst * 0.98) * visibility;
+      }
+      if (keyA?.color) {
+        keyA.color.copy(keyColorA).lerp(accentColor, 0.3);
+      }
+      if (keyB?.color) {
+        keyB.color.copy(keyColorB).lerp(accent2Color, 0.3);
+      }
+      if (keyC?.color) {
+        keyC.color.copy(keyColorA).lerp(keyColorB, 0.55);
+      }
+      if (keyA?.position) {
+        keyA.position.x = 0.78 + Math.sin(elapsed * 0.52) * 0.18;
+        keyA.position.y = 1.74 + Math.cos(elapsed * 0.38) * 0.14;
+      }
+      if (keyB?.position) {
+        keyB.position.x = -0.86 + Math.cos(elapsed * 0.44) * 0.16;
+        keyB.position.y = -1.52 + Math.sin(elapsed * 0.34) * 0.12;
+      }
+      if (keyC?.position) {
+        keyC.position.x = Math.sin(elapsed * 0.27 + 0.8) * 1.16;
+        keyC.position.y = Math.cos(elapsed * 0.24 + 1.1) * 0.84;
+        keyC.position.z = 1.8 + Math.sin(elapsed * 0.31) * 0.34;
+      }
+    }
+  });
+
+  return (
+    <group
+      ref={rootRef}
+      position={[DNA_VISUAL_CONFIG.rootX, DNA_VISUAL_CONFIG.rootY, DNA_VISUAL_CONFIG.rootZ]}
+      scale={[DNA_VISUAL_CONFIG.rootScale, DNA_VISUAL_CONFIG.rootScale, DNA_VISUAL_CONFIG.rootScale]}
+    >
+      <group ref={backLayerRef}>
+        <DnaShadowGradient profile={profile} palette={palette} pointerRef={pointerRef} activityRef={activityRef} />
+        <DnaDustField pointerRef={pointerRef} palette={palette} activityRef={activityRef} />
+      </group>
+
+      <group ref={midLayerRef}>
+        <DnaHelixBorderAura palette={palette} activityRef={activityRef} />
+        <DnaCoreSphere palette={palette} profile={profile} activityRef={activityRef} />
+        <DnaCoreOrbitRings palette={palette} activityRef={activityRef} />
+        <DnaSphereLinks pointerRef={pointerRef} profile={profile} palette={palette} activityRef={activityRef} />
+        <DnaBackboneStrands pointerRef={pointerRef} profile={profile} palette={palette} grade={grade} activityRef={activityRef} />
+      </group>
+
+      <group ref={foregroundLayerRef}>
+        <DnaBasePairs pointerRef={pointerRef} profile={profile} palette={palette} grade={grade} activityRef={activityRef} />
+        <DnaFlowParticles pointerRef={pointerRef} profile={profile} palette={palette} grade={grade} activityRef={activityRef} />
+      </group>
+
+      <group ref={glowKeyRef}>
+        <pointLight position={[0.8, 1.8, 1.2]} intensity={0.58} color={palette.accent} distance={7.2} decay={2} />
+        <pointLight position={[-0.9, -1.6, 1.4]} intensity={0.46} color={palette.accent2} distance={6.8} decay={2} />
+        <pointLight position={[0, 0.7, 1.9]} intensity={0.38} color={palette.foreground} distance={6.1} decay={2} />
+      </group>
+    </group>
+  );
+}
+
+function CardMesh({ card, index, scrollProgressRef, pointerRef, profile }: CardMeshProps) {
   const groupRef = useRef<Group>(null);
-  const imageRef = useRef<Mesh>(null);
+  const imageLayerRef = useRef<Group>(null);
   const cardImageUrl = useMemo(() => normalizeCardImageUrl(card.imageUrl), [card.imageUrl]);
+  const cardBackImageUrl = useMemo(() => normalizeCardImageUrl(card.backImageUrl), [card.backImageUrl]);
 
   const rawTexture = useLoader(TextureLoader, cardImageUrl, (loader) => {
+    loader.setCrossOrigin("anonymous");
+  });
+  const rawBackTexture = useLoader(TextureLoader, cardBackImageUrl, (loader) => {
     loader.setCrossOrigin("anonymous");
   });
   const cardWidth = 1.516;
@@ -429,11 +1753,26 @@ function CardMesh({ card, index, scrollProgressRef, pointerRef, profile, grade }
     return nextTexture;
   }, [rawTexture, cardAspect]);
 
+  const backTexture = useMemo(() => {
+    const nextTexture = rawBackTexture.clone();
+    nextTexture.colorSpace = SRGBColorSpace;
+    nextTexture.wrapS = ClampToEdgeWrapping;
+    nextTexture.wrapT = ClampToEdgeWrapping;
+    nextTexture.minFilter = LinearMipmapLinearFilter;
+    nextTexture.magFilter = LinearFilter;
+    nextTexture.anisotropy = 8;
+    const imageAspect = getTextureAspect(nextTexture, cardAspect);
+    applyCoverUv(nextTexture, imageAspect, cardAspect);
+    nextTexture.needsUpdate = true;
+    return nextTexture;
+  }, [rawBackTexture, cardAspect]);
+
   useEffect(() => {
     return () => {
       texture.dispose();
+      backTexture.dispose();
     };
-  }, [texture]);
+  }, [texture, backTexture]);
 
   const imageGeometry = useMemo(
     () => normalizeGeometryUv(createRoundedRectGeometry(cardWidth, cardHeight, 0.126)),
@@ -448,8 +1787,8 @@ function CardMesh({ card, index, scrollProgressRef, pointerRef, profile, grade }
     { x: 0, y: Math.PI * 2, z: Math.PI * 2 },               // Simple tumble
   ] as const;
   const START_POSITIONS = [
-    { x: -1.8, y: 4.75, z: 1.5 },  // Narrowed to clear Nav
-    { x: 1.4, y: 4.2, z: 1.2 },    // Narrowed to clear Nav
+    { x: -1.8, y: 4.55, z: 1.5 },  // Narrowed to clear Nav
+    { x: 1.7, y: 4.2, z: 1.2 },    // Narrowed to clear Nav
     { x: -1.2, y: 3.5, z: 2.8 },   // Tighter cluster
     { x: 0.5, y: 3.5, z: 2.4 },    // Tighter cluster
   ] as const;
@@ -467,9 +1806,9 @@ function CardMesh({ card, index, scrollProgressRef, pointerRef, profile, grade }
 
   useFrame((state, delta) => {
     const group = groupRef.current;
-    const imageMesh = imageRef.current;
+    const imageLayer = imageLayerRef.current;
 
-    if (!group || !imageMesh) {
+    if (!group || !imageLayer) {
       return;
     }
 
@@ -503,10 +1842,11 @@ function CardMesh({ card, index, scrollProgressRef, pointerRef, profile, grade }
     const selfRotX = (Math.sin(phase * 1.5) * 1.4 + (travelProgress - 0.5) * 0.28) * motionEnvelope * idleRotFactor;
     const selfRotY = (Math.cos(phase * 1.2) * 1.6 + pointerState.x * 0.4) * motionEnvelope * idleRotFactor;
     const selfRotZ = (Math.sin(phase * 1.8) * 1.2) * motionEnvelope * idleRotFactor;
+    const footerBackReveal = smoothstep(0.78, 0.96, scrollProgress) * Math.PI;
 
     // Final rotations = Scroll Scrub Math + Continuous Idle Spin Matrix
     const finalRotXTarget = scrollRotX + selfRotX;
-    const finalRotYTarget = scrollRotY + selfRotY;
+    const finalRotYTarget = scrollRotY + selfRotY + footerBackReveal;
     const finalRotZTarget = scrollRotZ + selfRotZ;
 
     const driftX = (Math.sin(phase * 1.05) * 0.18 + pointerState.x * 0.32) * motionEnvelope;
@@ -533,40 +1873,29 @@ function CardMesh({ card, index, scrollProgressRef, pointerRef, profile, grade }
     group.scale.y = MathUtils.damp(group.scale.y, scaleTarget, 5, delta);
     group.scale.z = MathUtils.damp(group.scale.z, 1, 5, delta);
 
-    imageMesh.rotation.z = MathUtils.damp(imageMesh.rotation.z, Math.sin(phase * 0.8) * 0.03 * motionEnvelope, 4, delta);
+    imageLayer.rotation.z = MathUtils.damp(imageLayer.rotation.z, Math.sin(phase * 0.8) * 0.03 * motionEnvelope, 4, delta);
   });
 
   return (
     <group ref={groupRef}>
-      <mesh ref={imageRef} geometry={imageGeometry} position={[0, 0, 0.014]}>
-        <meshBasicMaterial
-          map={texture}
-          toneMapped={false}
-        />
-      </mesh>
-
-      <TrailParticles
-        count={profile.particleCount}
-        phaseOffset={card.phaseOffset}
-        color="#8ff3ff"
-        pointerRef={pointerRef}
-        profile={profile}
-        layerOffset={index * 0.42}
-        scrollProgressRef={scrollProgressRef}
-        lowOpacity={resolvedGrade.trailOpacityLow}
-        highOpacity={resolvedGrade.trailOpacityHigh}
-      />
-      <TrailParticles
-        count={Math.max(10, Math.round(profile.particleCount * 0.56))}
-        phaseOffset={card.phaseOffset + 1.2}
-        color="#ff9cde"
-        pointerRef={pointerRef}
-        profile={profile}
-        layerOffset={index * 0.28 + 0.64}
-        scrollProgressRef={scrollProgressRef}
-        lowOpacity={resolvedGrade.trailOpacityLow * 0.9}
-        highOpacity={resolvedGrade.trailOpacityHigh * 0.82}
-      />
+      <group ref={imageLayerRef}>
+        <mesh geometry={imageGeometry} position={[0, 0, 0.014]}>
+          <meshBasicMaterial
+            map={texture}
+            transparent
+            opacity={0.84}
+            toneMapped={false}
+          />
+        </mesh>
+        <mesh geometry={imageGeometry} position={[0, 0, -0.014]} rotation={[0, Math.PI, 0]}>
+          <meshBasicMaterial
+            map={backTexture}
+            transparent
+            opacity={0.82}
+            toneMapped={false}
+          />
+        </mesh>
+      </group>
     </group>
   );
 }
@@ -627,15 +1956,37 @@ export function FloatingCardScene({ cards, scrollProgressRef, pointerRef }: Floa
     }} aria-hidden="true">
       <Canvas
         dpr={[1, 1.5]}
-        gl={{ antialias: false, alpha: true, powerPreference: "high-performance" }}
+        gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
         camera={{ position: [0, 0, 13], fov: 50 }}
+        onCreated={({ gl }) => {
+          gl.toneMapping = ACESFilmicToneMapping;
+          gl.toneMappingExposure = 1.08;
+        }}
       >
-        <ambientLight intensity={0.74} color="#d8ecff" />
-        <directionalLight position={[5, 6, 4]} intensity={1.55} color="#a6ddff" />
-        <pointLight position={[-4, -3, 5]} intensity={0.9} color="#b08dff" />
-        <pointLight position={[3, 4, -2]} intensity={0.5} color="#90f7ce" />
+        <fog attach="fog" args={["#04101a", 9.5, 22]} />
+        <ambientLight intensity={0.38} color="#d5f4ff" />
+        <hemisphereLight intensity={0.32} color={themeConfig.palette.accent} groundColor="#031523" />
+        <directionalLight position={[4, 5, 6]} intensity={1.04} color="#b7e6ff" />
+        <pointLight position={[-3.5, -2.2, 4.8]} intensity={0.4} color={themeConfig.palette.accent2} />
+        <pointLight position={[2.4, 1.2, 3.7]} intensity={0.34} color={themeConfig.palette.accent} />
 
-        <RailwayLines palette={themeConfig.palette} grade={themeConfig.grade!} pointerRef={pointerRef} />
+        <DnaHelixSystem
+          pointerRef={pointerRef}
+          scrollProgressRef={scrollProgressRef}
+          profile={themeConfig.profile}
+          palette={themeConfig.palette}
+          grade={themeConfig.grade}
+        />
+
+        <EffectComposer multisampling={0}>
+          <Bloom
+            intensity={1.28}
+            luminanceThreshold={0.16}
+            luminanceSmoothing={0.72}
+            mipmapBlur
+            radius={0.92}
+          />
+        </EffectComposer>
 
         {cards.slice(0, 4).map((card, index) => (
           <CardMesh
@@ -645,7 +1996,6 @@ export function FloatingCardScene({ cards, scrollProgressRef, pointerRef }: Floa
             scrollProgressRef={scrollProgressRef}
             pointerRef={pointerRef}
             profile={themeConfig.profile}
-            grade={themeConfig.grade}
           />
         ))}
       </Canvas>

@@ -2,11 +2,14 @@
 
 import { motion, useScroll, useSpring, useTransform } from "framer-motion";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 const RADIUS = 20;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 export function ScrollProgressRing() {
+  const pathname = usePathname();
+  const isBlogArticle = pathname.startsWith("/blog/");
   const { scrollYProgress } = useScroll();
   const smoothed = useSpring(scrollYProgress, { stiffness: 90, damping: 28, restDelta: 0.001 });
   const dashOffset = useTransform(smoothed, [0, 1], [CIRCUMFERENCE, 0]);
@@ -14,12 +17,20 @@ export function ScrollProgressRing() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    if (isBlogArticle) {
+      return;
+    }
+
     const unsubProgress = smoothed.on("change", (v) => {
       setComplete(v > 0.98);
       setVisible(v > 0.04);
     });
     return unsubProgress;
-  }, [smoothed]);
+  }, [isBlogArticle, smoothed]);
+
+  if (isBlogArticle) {
+    return null;
+  }
 
   return (
     <motion.div

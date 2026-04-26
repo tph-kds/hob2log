@@ -25,10 +25,10 @@ const focusRules = [
 ];
 
 const socialLinks: FooterLinkItem[] = [
-  { href: "https://github.com", label: "GitHub", seed: 29, icon: "github" },
+  { href: "https://github.com/tph-kds", label: "GitHub", seed: 29, icon: "github" },
   { href: "https://x.com", label: "X", seed: 34, icon: "x" },
-  { href: "https://www.linkedin.com", label: "LinkedIn", seed: 46, icon: "linkedin" },
-  { href: "/projects", label: "Portfolio", seed: 72, icon: "portfolio" },
+  { href: "https://www.linkedin.com/in/phihungtran", label: "LinkedIn", seed: 46, icon: "linkedin" },
+  { href: "https://tph-kds.github.io/portfolio", label: "Portfolio", seed: 72, icon: "portfolio" },
   { href: "https://buymeacoffee.com", label: "Donate", seed: 85, icon: "donate" },
 ];
 
@@ -93,7 +93,7 @@ export function SiteFooter() {
           </section>
 
           <section>
-            <p className="footer-label text-xs uppercase tracking-[0.2em] text-sky-100/75">Navigation</p>
+            <p className="footer-label text-xs uppercase tracking-[0.2em]">Navigation</p>
             <div className="mt-3 flex flex-col gap-2 text-sm">
               {navigationLinks.map((item) => (
                 <Link key={item.href} href={item.href} className="footer-hover-item footer-link-with-icon" style={getHoverSeedStyle(item.seed)}>
@@ -105,7 +105,7 @@ export function SiteFooter() {
           </section>
 
           <section>
-            <p className="footer-label text-xs uppercase tracking-[0.2em] text-sky-100/75">Focus Rules</p>
+            <p className="footer-label text-xs uppercase tracking-[0.2em]">Focus Rules</p>
             <ul className="mt-3 space-y-2 text-sm text-(--muted)">
               {focusRules.map((item) => (
                 <li key={item.label} className="footer-hover-item" style={getHoverSeedStyle(item.seed)}>
@@ -116,7 +116,7 @@ export function SiteFooter() {
           </section>
 
           <section>
-            <p className="footer-label text-xs uppercase tracking-[0.2em] text-sky-100/75">Social Network</p>
+            <p className="footer-label text-xs uppercase tracking-[0.2em]">Social Network</p>
             <ul className="mt-3 flex flex-col gap-2 text-sm">
               {socialLinks.map((item) => (
                 <li key={item.label}>
@@ -137,7 +137,7 @@ export function SiteFooter() {
           </section>
 
           <section className="footer-support-panel">
-            <p className="footer-label text-xs uppercase tracking-[0.2em] text-sky-100/75">Bonus / Donate</p>
+            <p className="footer-label text-xs uppercase tracking-[0.2em]">Bonus / Donate</p>
             <p className="mt-3 text-sm text-(--muted)">Support this blog by scanning the QR code.</p>
             <a
               href="https://buymeacoffee.com"

@@ -18,12 +18,45 @@ interface HeroAnimatedCopyProps {
 }
 
 const ROLE_PARAGRAPHS = [
-  "I architect and deliver production-ready systems, turning ambiguous ideas into software with clear structure and momentum.",
-  "I work where product thinking meets engineering craft, using visual depth and interaction to make complex concepts feel intuitive.",
-  "I publish concrete build logs so every experiment, trade-off, and outcome compounds into better execution.",
+  {
+    text: "Documenting how ideas evolve into dependable systems, from multimodal AI prototypes to production deployments with clarity, scalability, and measurable outcomes.",
+    inspiredBy: "Elon Musk",
+  },
+  {
+    text: "Designing and engineering intelligent products where research informs implementation, turning vague challenges into structured, testable, and deployable solutions.",
+    inspiredBy: "Steve Jobs",
+  },
+  {
+    text: "Publishing disciplined build journals where experiments, trade-offs, and failures become reusable engineering knowledge that compounds over time.",
+    inspiredBy: "Jeff Bezos",
+  },
+  {
+    text: "Turning AI progress into repeatable practice through iteration, instrumentation, and execution discipline rather than isolated breakthroughs.",
+    inspiredBy: "Andrew Ng",
+  },
+  {
+    text: "Building systems that keep people in the loop, using intelligence to amplify human judgment, learning, and practical decision-making.",
+    inspiredBy: "Fei-Fei Li",
+  },
+  {
+    text: "Favoring architectural leaps over incremental patches, designing platforms that solve classes of problems at a fundamentally larger scale.",
+    inspiredBy: "Jensen Huang",
+  },
+  {
+    text: "Focusing on execution consistency, because durable products are built through repeated delivery quality, not career optics.",
+    inspiredBy: "Jensen Huang (Execution Mindset)",
+  },
+  {
+    text: "Pursuing ambitious technical targets that raise the engineering bar, since breakthrough outcomes rarely come from timid roadmaps.",
+    inspiredBy: "Lisa Su",
+  },
+  {
+    text: "Staying resilient through failures and recovering fast, treating persistence and adaptation as core capabilities in long-horizon systems.",
+    inspiredBy: "Jack Ma",
+  },
 ];
 
-const SUBTITLE = "First, a solid foundation. Then experiments become systems.";
+const SUBTITLE = "Every line of code is a hypothesis where ideas are pressure-tested. Iteration, failures, and refinement transform rough experiments into dependable products. Control, creativity, and execution discipline shape how concepts become reliable systems";
 const TITLE = "Trần Phi Hùng";
 const ROLE_ROTATION_MS = 5200;
 
@@ -34,10 +67,6 @@ const EFFECT_MODES: { id: EffectMode; label: string; icon: string }[] = [
   { id: "ember", label: "Ember", icon: "🔥" },
   { id: "frost", label: "Frost", icon: "❄" },
 ];
-
-function splitWords(value: string) {
-  return value.split(/\s+/).filter(Boolean);
-}
 
 function splitCharacters(value: string) {
   return Array.from(value);
@@ -58,7 +87,14 @@ export function HeroAnimatedCopy({
   const [effectMode, setEffectMode] = useState<EffectMode>("all");
   const prefersReducedMotion = useReducedMotion();
 
-  const subtitleWords = useMemo(() => splitWords(SUBTITLE), []);
+  const subtitleLines = useMemo(
+    () => [
+      "Every line of code is a hypothesis where ideas are pressure-tested.",
+      "Iteration, failures, and refinement transform rough experiments into dependable products.",
+      "Control, creativity, and execution discipline shape how concepts become reliable systems",
+    ],
+    []
+  );
   const titleChars = useMemo(() => splitCharacters(TITLE), []);
 
   useLayoutEffect(() => {
@@ -169,19 +205,21 @@ export function HeroAnimatedCopy({
         </div>
       )}
 
-      <p className="blog-landing-subtitle hero-subtitle-words" aria-label={SUBTITLE}>
-        {subtitleWords.map((word, index) => (
-          <span key={`${word}-${index}`} data-reveal-word className="hero-subtitle-word" aria-hidden="true">
-            {word}
-          </span>
-        ))}
-      </p>
+      <div className="blog-landing-subtitle-shell" data-reveal-paragraph>
+        <p className="blog-landing-subtitle" aria-label={SUBTITLE}>
+          {subtitleLines.map((line, index) => (
+            <span key={`${line}-${index}`} data-line={line} data-reveal-word className="hero-subtitle-line">
+              {line}
+            </span>
+          ))}
+        </p>
+      </div>
 
       <div className="blog-landing-roles">
         <div data-reveal-paragraph className="blog-landing-roles-viewport" aria-live="polite">
           <AnimatePresence mode="wait" initial={false}>
             <motion.p
-              key={ROLE_PARAGRAPHS[roleIndex]}
+              key={`${ROLE_PARAGRAPHS[roleIndex]?.text}-${ROLE_PARAGRAPHS[roleIndex]?.inspiredBy}`}
               className="hero-role-rotating-line"
               initial={
                 prefersReducedMotion
@@ -200,14 +238,15 @@ export function HeroAnimatedCopy({
               }
               transition={{ duration: prefersReducedMotion ? 0.22 : 0.78, ease: [0.22, 1, 0.36, 1] }}
             >
-              {ROLE_PARAGRAPHS[roleIndex]}
+              <span className="hero-role-quote">{`"${ROLE_PARAGRAPHS[roleIndex]?.text}"`}</span>
+              <em className="hero-role-inspired-by">Inspired by {ROLE_PARAGRAPHS[roleIndex]?.inspiredBy}</em>
             </motion.p>
           </AnimatePresence>
         </div>
       </div>
 
       <div className="blog-landing-actions">
-        <Link href={ctaHref} className="dynamic-theme-button rounded-full px-6 py-3 font-semibold text-slate-950" data-reveal-cta>
+        <Link href={ctaHref} className="dynamic-theme-button theme-solid-button-text rounded-full px-6 py-3 font-semibold" data-reveal-cta>
           {ctaLabel}
         </Link>
         <span className="blog-landing-scroll-hint" data-reveal-cta>

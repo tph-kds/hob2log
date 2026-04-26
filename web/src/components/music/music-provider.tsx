@@ -249,6 +249,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const gainNodeRef = useRef<GainNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const nextTrackRef = useRef<() => Promise<void>>(async () => {});
+  const lastUiTimeRef = useRef(0);
+  const volumePersistTimerRef = useRef<number | null>(null);
 
   const currentTrack = useMemo(() => {
     if (!currentTrackId) {
@@ -430,7 +432,15 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     (nextVolume: number) => {
       const normalized = clampVolume(nextVolume);
       applyVolume(normalized, currentTrack);
-      persistPrefs((prev) => ({ ...prev, volume: normalized }));
+
+      if (volumePersistTimerRef.current !== null) {
+        window.clearTimeout(volumePersistTimerRef.current);
+      }
+
+      volumePersistTimerRef.current = window.setTimeout(() => {
+        persistPrefs((prev) => ({ ...prev, volume: normalized }));
+        volumePersistTimerRef.current = null;
+      }, 180);
     },
     [applyVolume, currentTrack, persistPrefs],
   );
@@ -501,7 +511,14 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     audioRef.current = audio;
 
     const onTimeUpdate = () => {
-      setCurrentTime(audio.currentTime || 0);
+      const nextTime = audio.currentTime || 0;
+
+      if (Math.abs(nextTime - lastUiTimeRef.current) < 0.2) {
+        return;
+      }
+
+      lastUiTimeRef.current = nextTime;
+      setCurrentTime(nextTime);
     };
 
     const onDurationChange = () => {
@@ -541,6 +558,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     audio.volume = prefsStore.getSnapshot().volume;
 
     return () => {
+      if (volumePersistTimerRef.current !== null) {
+        window.clearTimeout(volumePersistTimerRef.current);
+        volumePersistTimerRef.current = null;
+      }
+
       audio.pause();
       audio.src = "";
       audio.load();

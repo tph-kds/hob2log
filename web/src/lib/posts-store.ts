@@ -22,7 +22,7 @@ interface PostRow {
   cover_image: string | null;
   media: PostMedia[] | null;
   published: boolean | null;
-  content: string;
+  content?: string | null;
 }
 
 const runtimePosts: Post[] = [];
@@ -62,7 +62,7 @@ function mapPostRow(row: PostRow): Post {
     coverImage: row.cover_image ?? undefined,
     media: Array.isArray(row.media) ? row.media : [],
     published: row.published ?? true,
-    content: row.content,
+    content: typeof row.content === "string" ? row.content : "",
   };
 }
 
@@ -115,18 +115,26 @@ function normalizePostInput(input: CreatePostInput) {
   };
 }
 
-export async function listPosts(options?: { includeDrafts?: boolean }) {
+export async function listPosts(options?: { includeDrafts?: boolean; includeContent?: boolean }) {
   const includeDrafts = options?.includeDrafts ?? false;
+  const includeContent = options?.includeContent ?? true;
   const supabase = getSupabaseServerClient();
 
   if (!supabase) {
     return listFallbackPosts({ includeDrafts });
   }
 
-  const { data, error } = await supabase
-    .from("posts")
-    .select("slug,title,summary,created_at,tags,cover_image,media,published,content")
-    .order("created_at", { ascending: false });
+  const query = includeContent
+    ? supabase
+      .from("posts")
+      .select("slug,title,summary,created_at,tags,cover_image,media,published,content")
+      .order("created_at", { ascending: false })
+    : supabase
+      .from("posts")
+      .select("slug,title,summary,created_at,tags,cover_image,media,published")
+      .order("created_at", { ascending: false });
+
+  const { data, error } = await query;
 
   if (error || !Array.isArray(data)) {
     return listFallbackPosts({ includeDrafts });
@@ -142,8 +150,51 @@ export async function listPosts(options?: { includeDrafts?: boolean }) {
 }
 
 export async function getPostBySlug(slug: string, options?: { includeDrafts?: boolean }) {
-  const items = await listPosts(options);
-  return items.find((post) => post.slug === slug) ?? null;
+  const includeDrafts = options?.includeDrafts ?? false;
+  const supabase = getSupabaseServerClient();
+
+  if (!supabase) {
+    const items = listFallbackPosts({ includeDrafts: true });
+    const post = items.find((item) => item.slug === slug) ?? null;
+
+    if (!post) {
+      return null;
+    }
+
+    if (!includeDrafts && post.published === false) {
+      return null;
+    }
+
+    return post;
+  }
+
+  const { data, error } = await supabase
+    .from("posts")
+    .select("slug,title,summary,created_at,tags,cover_image,media,published,content")
+    .eq("slug", slug)
+    .single();
+
+  if (error || !data) {
+    const fallback = listFallbackPosts({ includeDrafts: true }).find((item) => item.slug === slug) ?? null;
+
+    if (!fallback) {
+      return null;
+    }
+
+    if (!includeDrafts && fallback.published === false) {
+      return null;
+    }
+
+    return fallback;
+  }
+
+  const post = mapPostRow(data as PostRow);
+
+  if (!includeDrafts && post.published === false) {
+    return null;
+  }
+
+  return post;
 }
 
 export async function createPost(input: CreatePostInput) {

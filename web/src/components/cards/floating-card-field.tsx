@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type MutableRefObject } from "react";
 
 interface FloatingCardInput {
   id: string;
@@ -13,10 +13,8 @@ interface FloatingCardInput {
 
 interface FloatingCardFieldProps {
   cards: FloatingCardInput[];
-  pointerState: {
-    x: number;
-    y: number;
-  };
+  pointerRef: MutableRefObject<{ x: number; y: number }>;
+  scrollProgressRef: MutableRefObject<number>;
 }
 
 interface ViewportState {
@@ -48,11 +46,10 @@ function pathTwo(progress: number, width: number, height: number) {
   return { x, y };
 }
 
-export function FloatingCardField({ cards, pointerState }: FloatingCardFieldProps) {
+export function FloatingCardField({ cards, pointerRef, scrollProgressRef }: FloatingCardFieldProps) {
   const [viewport, setViewport] = useState<ViewportState>({ width: 0, height: 0 });
-  const [scrollProgress, setScrollProgress] = useState(0);
-  const [time, setTime] = useState(0);
   const [motionFactor, setMotionFactor] = useState(1);
+  const cardRefs = useRef<Array<HTMLElement | null>>([]);
 
   useEffect(() => {
     function readMotionFactor() {
@@ -77,7 +74,7 @@ export function FloatingCardField({ cards, pointerState }: FloatingCardFieldProp
     }
 
     updateViewport();
-    window.addEventListener("resize", updateViewport);
+    window.addEventListener("resize", updateViewport, { passive: true });
 
     return () => {
       window.removeEventListener("resize", updateViewport);
@@ -85,55 +82,26 @@ export function FloatingCardField({ cards, pointerState }: FloatingCardFieldProp
   }, []);
 
   useEffect(() => {
-    let isTicking = false;
-
-    function onScroll() {
-      if (isTicking) {
-        return;
-      }
-
-      isTicking = true;
-
-      window.requestAnimationFrame(() => {
-        const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-        const progress = clamp(window.scrollY / maxScroll, 0, 1);
-        setScrollProgress(progress);
-        isTicking = false;
-      });
-    }
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-    };
-  }, []);
-
-  useEffect(() => {
     let animationFrame = 0;
+    const visibleCards = cards.slice(0, 2);
 
     function tick(now: number) {
-      setTime(now * 0.0015);
-      animationFrame = window.requestAnimationFrame(tick);
-    }
+      const time = now * 0.0015;
+      const pointerState = pointerRef.current;
+      const scrollProgress = clamp(scrollProgressRef.current, 0, 1);
+      const travelProgress = clamp((scrollProgress - 0.08) / 0.82, 0, 1);
 
-    animationFrame = window.requestAnimationFrame(tick);
+      for (let index = 0; index < visibleCards.length; index += 1) {
+        const card = visibleCards[index];
+        const node = cardRefs.current[index];
 
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-    };
-  }, []);
+        if (!card || !node) {
+          continue;
+        }
 
-  if (viewport.width === 0 || cards.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="floating-card-field" aria-hidden="true">
-      {cards.slice(0, 2).map((card, index) => {
-        const travelProgress = clamp((scrollProgress - 0.08) / 0.82, 0, 1);
-        const path = index === 0 ? pathOne(travelProgress, viewport.width, viewport.height) : pathTwo(travelProgress, viewport.width, viewport.height);
+        const path = index === 0
+          ? pathOne(travelProgress, viewport.width, viewport.height)
+          : pathTwo(travelProgress, viewport.width, viewport.height);
         const depthCycle = Math.sin((scrollProgress * Math.PI * 2.2) + card.phaseOffset);
         const depthFactor = (depthCycle + 1) * 0.5;
         const baseEnvelope = clamp((scrollProgress - 0.04) / 0.16, 0, 1) * (1 - clamp((scrollProgress - 0.88) / 0.12, 0, 1));
@@ -147,17 +115,44 @@ export function FloatingCardField({ cards, pointerState }: FloatingCardFieldProp
         const opacity = lerp(0.22, 0.66, depthFactor);
         const layerIndex = Math.round(10 + depthFactor * 20);
 
+        node.style.transform = `translate3d(${path.x + driftX}px, ${path.y + driftY}px, 0) translate(-50%, -50%) rotateX(${rotateX}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg) scale(${scale})`;
+        node.style.opacity = `${opacity}`;
+        node.style.zIndex = `${layerIndex}`;
+      }
+
+      animationFrame = window.requestAnimationFrame(tick);
+    }
+
+    animationFrame = window.requestAnimationFrame(tick);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+    };
+  }, [cards, motionFactor, pointerRef, scrollProgressRef, viewport.height, viewport.width]);
+
+  if (viewport.width === 0 || cards.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="floating-card-field" aria-hidden="true">
+      {cards.slice(0, 2).map((card, index) => {
         const style = {
-          left: `${path.x + driftX}px`,
-          top: `${path.y + driftY}px`,
-          transform: `translate(-50%, -50%) rotateX(${rotateX}deg) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg) scale(${scale})`,
+          transform: "translate3d(-9999px, -9999px, 0)",
           filter: "none",
-          opacity,
-          zIndex: layerIndex,
+          opacity: 0,
+          zIndex: 1,
         };
 
         return (
-          <article key={card.id} className="floating-diamond-card" style={style}>
+          <article
+            key={card.id}
+            ref={(node) => {
+              cardRefs.current[index] = node;
+            }}
+            className="floating-diamond-card"
+            style={style}
+          >
             <div className="floating-diamond-shell" />
             <div className="floating-diamond-image-wrap">
               <Image

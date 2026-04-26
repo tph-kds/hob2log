@@ -96,6 +96,13 @@ interface DnaActivitySignal {
   visibility: number;
 }
 
+interface ScenePerformanceProfile {
+  scale: number;
+  dpr: [number, number];
+  antialias: boolean;
+  enableBloom: boolean;
+}
+
 interface CardMeshProps {
   card: FloatingCardInput;
   index: number;
@@ -105,12 +112,17 @@ interface CardMeshProps {
     y: number;
   }>;
   profile: ThemeMotionProfile;
+  performanceScale: number;
 }
 
 const THEME_MOTION_PROFILES: Record<string, ThemeMotionProfile> = {
   ocean: { motionIntensity: 1.16, weight: 0.9, edgeVelocity: 0.58, particleCount: 42, particleSize: 0.042, particleSpread: 1.06, particleSpeed: 1.18, densityBias: 0.36, densityCeiling: 1 },
   sunset: { motionIntensity: 1.08, weight: 0.92, edgeVelocity: 0.5, particleCount: 38, particleSize: 0.04, particleSpread: 1, particleSpeed: 1.1, densityBias: 0.32, densityCeiling: 0.95 },
   forest: { motionIntensity: 1.02, weight: 0.95, edgeVelocity: 0.46, particleCount: 34, particleSize: 0.039, particleSpread: 0.96, particleSpeed: 1.02, densityBias: 0.28, densityCeiling: 0.9 },
+  dawn: { motionIntensity: 0.88, weight: 1.02, edgeVelocity: 0.34, particleCount: 28, particleSize: 0.033, particleSpread: 0.84, particleSpeed: 0.86, densityBias: 0.18, densityCeiling: 0.76 },
+  pearl: { motionIntensity: 0.9, weight: 1, edgeVelocity: 0.36, particleCount: 30, particleSize: 0.034, particleSpread: 0.88, particleSpeed: 0.9, densityBias: 0.2, densityCeiling: 0.8 },
+  mint: { motionIntensity: 0.92, weight: 0.98, edgeVelocity: 0.38, particleCount: 31, particleSize: 0.035, particleSpread: 0.9, particleSpeed: 0.92, densityBias: 0.22, densityCeiling: 0.82 },
+  eclipse: { motionIntensity: 1.04, weight: 0.96, edgeVelocity: 0.5, particleCount: 36, particleSize: 0.038, particleSpread: 0.98, particleSpeed: 1.08, densityBias: 0.3, densityCeiling: 0.9 },
   mono: { motionIntensity: 0.9, weight: 1.02, edgeVelocity: 0.34, particleCount: 30, particleSize: 0.034, particleSpread: 0.88, particleSpeed: 0.88, densityBias: 0.2, densityCeiling: 0.78 },
   latte: { motionIntensity: 0.86, weight: 1.06, edgeVelocity: 0.3, particleCount: 26, particleSize: 0.032, particleSpread: 0.82, particleSpeed: 0.8, densityBias: 0.16, densityCeiling: 0.72 },
   mocha: { motionIntensity: 1, weight: 1, edgeVelocity: 0.42, particleCount: 32, particleSize: 0.036, particleSpread: 0.92, particleSpeed: 0.95, densityBias: 0.24, densityCeiling: 0.84 },
@@ -122,6 +134,10 @@ const THEME_COLOR_GRADES: Record<string, ThemeColorGrade> = {
   ocean: { trailPrimary: "#5bd9ff", trailSecondary: "#8effd6", edgeTint: "#7cb8ff", trailOpacityLow: 0.14, trailOpacityHigh: 0.5 },
   sunset: { trailPrimary: "#ff8ba9", trailSecondary: "#ffd083", edgeTint: "#ffb59d", trailOpacityLow: 0.14, trailOpacityHigh: 0.48 },
   forest: { trailPrimary: "#74ebb8", trailSecondary: "#9be7ff", edgeTint: "#93ffcf", trailOpacityLow: 0.12, trailOpacityHigh: 0.44 },
+  dawn: { trailPrimary: "#ff9b85", trailSecondary: "#ffc18b", edgeTint: "#ffbfd8", trailOpacityLow: 0.1, trailOpacityHigh: 0.32 },
+  pearl: { trailPrimary: "#8ec5eb", trailSecondary: "#bee5fb", edgeTint: "#a7d9f7", trailOpacityLow: 0.1, trailOpacityHigh: 0.34 },
+  mint: { trailPrimary: "#7ac69d", trailSecondary: "#b6d990", edgeTint: "#9dd1be", trailOpacityLow: 0.1, trailOpacityHigh: 0.34 },
+  eclipse: { trailPrimary: "#8a95ff", trailSecondary: "#6be6c4", edgeTint: "#9cc7ff", trailOpacityLow: 0.12, trailOpacityHigh: 0.42 },
   mono: { trailPrimary: "#b8cee9", trailSecondary: "#d9e5f7", edgeTint: "#9fb9da", trailOpacityLow: 0.1, trailOpacityHigh: 0.34 },
   latte: { trailPrimary: "#d9aa8a", trailSecondary: "#c7b5e8", edgeTint: "#e0be9e", trailOpacityLow: 0.1, trailOpacityHigh: 0.32 },
   mocha: { trailPrimary: "#9ec1ff", trailSecondary: "#b5f0ae", edgeTint: "#c6b2f8", trailOpacityLow: 0.11, trailOpacityHigh: 0.38 },
@@ -169,6 +185,55 @@ function sampleBioGradient(target: Color, phase: number) {
   }
 
   return target.copy(BIO_BLUE).lerp(BIO_CYAN, wrapped - 2);
+}
+
+function readPerformanceProfile(): ScenePerformanceProfile {
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    return {
+      scale: 1,
+      dpr: [1, 1.35],
+      antialias: true,
+      enableBloom: true,
+    };
+  }
+
+  const connection = (navigator as Navigator & {
+    connection?: {
+      saveData?: boolean;
+      effectiveType?: string;
+    };
+  }).connection;
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;
+  const cores = navigator.hardwareConcurrency ?? 8;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  let scale = 1;
+
+  if (reducedMotion) {
+    scale *= 0.82;
+  }
+  if (connection?.saveData) {
+    scale *= 0.78;
+  }
+  if (connection?.effectiveType === "slow-2g" || connection?.effectiveType === "2g") {
+    scale *= 0.84;
+  }
+  if (memory <= 4) {
+    scale *= 0.82;
+  }
+  if (cores <= 4) {
+    scale *= 0.84;
+  }
+
+  const normalizedScale = clamp(scale, 0.56, 1);
+  const lowPower = normalizedScale < 0.8;
+
+  return {
+    scale: normalizedScale,
+    dpr: lowPower ? [0.75, 1.1] : [1, 1.35],
+    antialias: !lowPower,
+    enableBloom: normalizedScale > 0.7,
+  };
 }
 
 function createRoundedRectShape(width: number, height: number, radius: number) {
@@ -370,12 +435,14 @@ function DnaBackboneStrands({
   palette,
   grade,
   activityRef,
+  performanceScale,
 }: {
   pointerRef: MutableRefObject<{ x: number; y: number }>;
   profile: ThemeMotionProfile;
   palette: ThemePalette;
   grade: ThemeColorGrade;
   activityRef: MutableRefObject<DnaActivitySignal>;
+  performanceScale: number;
 }) {
   const leftTubeRef = useRef<InstancedMesh>(null);
   const rightTubeRef = useRef<InstancedMesh>(null);
@@ -394,9 +461,12 @@ function DnaBackboneStrands({
   const accentPrimary = useMemo(() => new Color(palette.accent), [palette.accent]);
   const accentSecondary = useMemo(() => new Color(palette.accent2), [palette.accent2]);
   const gradientColor = useMemo(() => new Color(), []);
-  const tubeCount = DNA_VISUAL_CONFIG.backboneCount;
-  const nodeCount = 28;
-  const flowCount = 20;
+  const tubeCount = Math.max(30, Math.round(DNA_VISUAL_CONFIG.backboneCount * performanceScale));
+  const nodeCount = Math.max(14, Math.round(28 * performanceScale));
+  const flowCount = Math.max(10, Math.round(20 * performanceScale));
+  const tubeRadialSegments = performanceScale < 0.75 ? 8 : 10;
+  const nodeSegments = performanceScale < 0.75 ? 8 : 12;
+  const flowSegments = performanceScale < 0.75 ? 7 : 10;
   const flowSeeds = useMemo(
     () =>
       Array.from({ length: flowCount }, (_, index) => ({
@@ -550,7 +620,7 @@ function DnaBackboneStrands({
   return (
     <group>
       <instancedMesh ref={leftTubeRef} args={[undefined, undefined, tubeCount]} frustumCulled={false}>
-        <cylinderGeometry args={[1, 1, 1, 10, 1, true]} />
+        <cylinderGeometry args={[1, 1, 1, tubeRadialSegments, 1, true]} />
         <meshPhysicalMaterial
           color={palette.accent}
           emissive={palette.accent}
@@ -568,7 +638,7 @@ function DnaBackboneStrands({
         />
       </instancedMesh>
       <instancedMesh ref={rightTubeRef} args={[undefined, undefined, tubeCount]} frustumCulled={false}>
-        <cylinderGeometry args={[1, 1, 1, 10, 1, true]} />
+        <cylinderGeometry args={[1, 1, 1, tubeRadialSegments, 1, true]} />
         <meshPhysicalMaterial
           color={palette.accent2}
           emissive={palette.accent2}
@@ -614,19 +684,19 @@ function DnaBackboneStrands({
         />
       </instancedMesh>
       <instancedMesh ref={leftNodeRef} args={[undefined, undefined, nodeCount]} frustumCulled={false}>
-        <sphereGeometry args={[1, 12, 12]} />
+        <sphereGeometry args={[1, nodeSegments, nodeSegments]} />
         <meshPhysicalMaterial color={palette.accent} emissive={palette.accent} transparent opacity={0.84} roughness={0.08} metalness={0.14} transmission={0.3} clearcoat={1} clearcoatRoughness={0.1} />
       </instancedMesh>
       <instancedMesh ref={rightNodeRef} args={[undefined, undefined, nodeCount]} frustumCulled={false}>
-        <sphereGeometry args={[1, 12, 12]} />
+        <sphereGeometry args={[1, nodeSegments, nodeSegments]} />
         <meshPhysicalMaterial color={palette.accent2} emissive={palette.accent2} transparent opacity={0.84} roughness={0.08} metalness={0.14} transmission={0.3} clearcoat={1} clearcoatRoughness={0.1} />
       </instancedMesh>
       <instancedMesh ref={leftFlowRef} args={[undefined, undefined, flowCount]} frustumCulled={false}>
-        <sphereGeometry args={[1, 10, 10]} />
+        <sphereGeometry args={[1, flowSegments, flowSegments]} />
         <meshStandardMaterial color={palette.accent} emissive={palette.accent} transparent opacity={0.7} roughness={0.1} metalness={0.06} depthWrite={false} blending={AdditiveBlending} />
       </instancedMesh>
       <instancedMesh ref={rightFlowRef} args={[undefined, undefined, flowCount]} frustumCulled={false}>
-        <sphereGeometry args={[1, 10, 10]} />
+        <sphereGeometry args={[1, flowSegments, flowSegments]} />
         <meshStandardMaterial color={palette.accent2} emissive={palette.accent2} transparent opacity={0.7} roughness={0.1} metalness={0.06} depthWrite={false} blending={AdditiveBlending} />
       </instancedMesh>
     </group>
@@ -639,14 +709,17 @@ function DnaBasePairs({
   palette,
   grade,
   activityRef,
+  performanceScale,
 }: {
   pointerRef: MutableRefObject<{ x: number; y: number }>;
   profile: ThemeMotionProfile;
   palette: ThemePalette;
   grade: ThemeColorGrade;
   activityRef: MutableRefObject<DnaActivitySignal>;
+  performanceScale: number;
 }) {
-  const pairCount = DNA_VISUAL_CONFIG.pairCount;
+  const pairCount = Math.max(10, Math.round(DNA_VISUAL_CONFIG.pairCount * performanceScale));
+  const capSegments = performanceScale < 0.75 ? 8 : 10;
   const pairRefs = useRef<Array<Group | null>>([]);
   const left = useMemo(() => new Vector3(), []);
   const right = useMemo(() => new Vector3(), []);
@@ -762,7 +835,7 @@ function DnaBasePairs({
             />
           </mesh>
           <mesh>
-            <sphereGeometry args={[0.04, 10, 10]} />
+            <sphereGeometry args={[0.04, capSegments, capSegments]} />
             <meshStandardMaterial
               color={palette.accent}
               emissive={palette.accent}
@@ -774,7 +847,7 @@ function DnaBasePairs({
             />
           </mesh>
           <mesh>
-            <sphereGeometry args={[0.04, 10, 10]} />
+            <sphereGeometry args={[0.04, capSegments, capSegments]} />
             <meshStandardMaterial
               color={palette.accent2}
               emissive={palette.accent2}
@@ -797,14 +870,17 @@ function DnaFlowParticles({
   palette,
   grade,
   activityRef,
+  performanceScale,
 }: {
   pointerRef: MutableRefObject<{ x: number; y: number }>;
   profile: ThemeMotionProfile;
   palette: ThemePalette;
   grade: ThemeColorGrade;
   activityRef: MutableRefObject<DnaActivitySignal>;
+  performanceScale: number;
 }) {
-  const count = DNA_VISUAL_CONFIG.flowCount + 34;
+  const baseCount = DNA_VISUAL_CONFIG.flowCount + profile.particleCount;
+  const count = Math.max(28, Math.round(baseCount * performanceScale));
   const positionRef = useRef<BufferAttribute>(null);
   const materialRef = useRef<PointsMaterial>(null);
   const positions = useMemo(() => new Float32Array(count * 3), [count]);
@@ -888,7 +964,7 @@ function DnaFlowParticles({
       <pointsMaterial
         ref={materialRef}
         color={palette.foreground}
-        size={0.062}
+        size={MathUtils.lerp(0.058, 0.072, 1 - performanceScale)}
         sizeAttenuation
         depthWrite={false}
         blending={AdditiveBlending}
@@ -904,13 +980,16 @@ function DnaSphereLinks({
   profile,
   palette,
   activityRef,
+  performanceScale,
 }: {
   pointerRef: MutableRefObject<{ x: number; y: number }>;
   profile: ThemeMotionProfile;
   palette: ThemePalette;
   activityRef: MutableRefObject<DnaActivitySignal>;
+  performanceScale: number;
 }) {
-  const linkCount = 8;
+  const linkCount = Math.max(5, Math.round(8 * performanceScale));
+  const pulseSegments = performanceScale < 0.75 ? 8 : 10;
   const linkRefs = useRef<Array<Group | null>>([]);
   const seeds = useMemo(
     () =>
@@ -1010,7 +1089,7 @@ function DnaSphereLinks({
             />
           </mesh>
           <mesh>
-            <sphereGeometry args={[1, 10, 10]} />
+            <sphereGeometry args={[1, pulseSegments, pulseSegments]} />
             <meshStandardMaterial color={palette.accent2} emissive={palette.accent2} emissiveIntensity={0.8} transparent opacity={0.9} roughness={0.1} metalness={0.08} />
           </mesh>
         </group>
@@ -1023,10 +1102,12 @@ function DnaCoreSphere({
   palette,
   profile,
   activityRef,
+  performanceScale,
 }: {
   palette: ThemePalette;
   profile: ThemeMotionProfile;
   activityRef: MutableRefObject<DnaActivitySignal>;
+  performanceScale: number;
 }) {
   const groupRef = useRef<Group>(null);
   const innerRef = useRef<Mesh>(null);
@@ -1041,6 +1122,9 @@ function DnaCoreSphere({
   const accentColor = useMemo(() => new Color(palette.accent), [palette.accent]);
   const accent2Color = useMemo(() => new Color(palette.accent2), [palette.accent2]);
   const foregroundColor = useMemo(() => new Color(palette.foreground), [palette.foreground]);
+  const sphereDetail = performanceScale < 0.75 ? 24 : 34;
+  const shellDetail = performanceScale < 0.75 ? 28 : 40;
+  const knotTubular = performanceScale < 0.75 ? 80 : 128;
 
   useFrame((state, delta) => {
     const group = groupRef.current;
@@ -1129,11 +1213,11 @@ function DnaCoreSphere({
   return (
     <group ref={groupRef}>
       <mesh ref={innerRef}>
-        <sphereGeometry args={[0.5, 34, 34]} />
+        <sphereGeometry args={[0.5, sphereDetail, sphereDetail]} />
         <meshStandardMaterial color={palette.accent} emissive={palette.accent} roughness={0.14} metalness={0.24} />
       </mesh>
       <mesh ref={swirlRef}>
-        <torusKnotGeometry args={[0.28, 0.08, 128, 16, 2, 3]} />
+        <torusKnotGeometry args={[0.28, 0.08, knotTubular, 16, 2, 3]} />
         <meshStandardMaterial
           color={palette.accent2}
           emissive={palette.accent2}
@@ -1147,7 +1231,7 @@ function DnaCoreSphere({
         />
       </mesh>
       <mesh ref={shellRef}>
-        <sphereGeometry args={[0.72, 40, 40]} />
+        <sphereGeometry args={[0.72, shellDetail, shellDetail]} />
         <meshPhysicalMaterial
           color={palette.foreground}
           emissive={palette.accent}
@@ -1168,7 +1252,7 @@ function DnaCoreSphere({
         />
       </mesh>
       <mesh ref={shellOuterRef}>
-        <sphereGeometry args={[0.78, 34, 34]} />
+        <sphereGeometry args={[0.78, sphereDetail, sphereDetail]} />
         <meshPhysicalMaterial
           color={palette.foreground}
           emissive={palette.accent2}
@@ -1188,7 +1272,7 @@ function DnaCoreSphere({
         />
       </mesh>
       <mesh ref={auraRef}>
-        <sphereGeometry args={[0.94, 28, 28]} />
+        <sphereGeometry args={[0.94, Math.max(20, sphereDetail - 6), Math.max(20, sphereDetail - 6)]} />
         <meshStandardMaterial
           color={palette.accent}
           emissive={palette.accent}
@@ -1223,9 +1307,11 @@ function DnaCoreSphere({
 function DnaCoreOrbitRings({
   palette,
   activityRef,
+  performanceScale,
 }: {
   palette: ThemePalette;
   activityRef: MutableRefObject<DnaActivitySignal>;
+  performanceScale: number;
 }) {
   const groupRef = useRef<Group>(null);
   const ringARef = useRef<Mesh>(null);
@@ -1235,6 +1321,9 @@ function DnaCoreOrbitRings({
   const colorB = useMemo(() => new Color(), []);
   const accentColor = useMemo(() => new Color(palette.accent), [palette.accent]);
   const accent2Color = useMemo(() => new Color(palette.accent2), [palette.accent2]);
+  const ringDetailA = performanceScale < 0.75 ? 84 : 132;
+  const ringDetailB = performanceScale < 0.75 ? 72 : 112;
+  const ringDetailC = performanceScale < 0.75 ? 64 : 96;
 
   useFrame((state, delta) => {
     const group = groupRef.current;
@@ -1284,15 +1373,15 @@ function DnaCoreOrbitRings({
   return (
     <group ref={groupRef}>
       <mesh ref={ringARef} rotation={[Math.PI * 0.5, 0, 0]}>
-        <torusGeometry args={[1.04, 0.016, 14, 132]} />
+        <torusGeometry args={[1.04, 0.016, 14, ringDetailA]} />
         <meshStandardMaterial transparent opacity={0.2} roughness={0.22} metalness={0.08} blending={AdditiveBlending} depthWrite={false} />
       </mesh>
       <mesh ref={ringBRef} rotation={[Math.PI * 0.5, Math.PI * 0.32, Math.PI * 0.12]}>
-        <torusGeometry args={[0.88, 0.013, 14, 112]} />
+        <torusGeometry args={[0.88, 0.013, 14, ringDetailB]} />
         <meshStandardMaterial transparent opacity={0.16} roughness={0.24} metalness={0.08} blending={AdditiveBlending} depthWrite={false} />
       </mesh>
       <mesh ref={ringCRef} rotation={[Math.PI * 0.5, -Math.PI * 0.22, -Math.PI * 0.12]}>
-        <torusGeometry args={[0.72, 0.01, 12, 96]} />
+        <torusGeometry args={[0.72, 0.01, 12, ringDetailC]} />
         <meshStandardMaterial transparent opacity={0.12} roughness={0.26} metalness={0.08} blending={AdditiveBlending} depthWrite={false} />
       </mesh>
     </group>
@@ -1302,9 +1391,11 @@ function DnaCoreOrbitRings({
 function DnaHelixBorderAura({
   palette,
   activityRef,
+  performanceScale,
 }: {
   palette: ThemePalette;
   activityRef: MutableRefObject<DnaActivitySignal>;
+  performanceScale: number;
 }) {
   const rootRef = useRef<Group>(null);
   const borderRef = useRef<Mesh>(null);
@@ -1314,6 +1405,9 @@ function DnaHelixBorderAura({
   const cB = useMemo(() => new Color(), []);
   const accent = useMemo(() => new Color(palette.accent), [palette.accent]);
   const accent2 = useMemo(() => new Color(palette.accent2), [palette.accent2]);
+  const borderSegments = performanceScale < 0.75 ? 92 : 150;
+  const innerSegments = performanceScale < 0.75 ? 84 : 128;
+  const sweepSegments = performanceScale < 0.75 ? 72 : 96;
 
   useFrame((state, delta) => {
     const root = rootRef.current;
@@ -1359,15 +1453,15 @@ function DnaHelixBorderAura({
   return (
     <group ref={rootRef} rotation={[Math.PI * 0.5, 0, 0]}>
       <mesh ref={borderRef} scale={[1, 1.52, 1]}>
-        <torusGeometry args={[2.62, 0.016, 14, 150]} />
+        <torusGeometry args={[2.62, 0.016, 14, borderSegments]} />
         <meshStandardMaterial transparent opacity={0.14} roughness={0.2} metalness={0.08} blending={AdditiveBlending} depthWrite={false} />
       </mesh>
       <mesh ref={innerRef} scale={[1, 1.36, 1]}>
-        <torusGeometry args={[2.44, 0.01, 10, 128]} />
+        <torusGeometry args={[2.44, 0.01, 10, innerSegments]} />
         <meshStandardMaterial transparent opacity={0.1} roughness={0.24} metalness={0.06} blending={AdditiveBlending} depthWrite={false} />
       </mesh>
       <mesh ref={sweepRef} scale={[1, 1.48, 1]}>
-        <torusGeometry args={[2.58, 0.014, 10, 96, Math.PI * 1.16]} />
+        <torusGeometry args={[2.58, 0.014, 10, sweepSegments, Math.PI * 1.16]} />
         <meshStandardMaterial transparent opacity={0.18} roughness={0.18} metalness={0.08} blending={AdditiveBlending} depthWrite={false} side={DoubleSide} />
       </mesh>
     </group>
@@ -1378,12 +1472,14 @@ function DnaDustField({
   pointerRef,
   palette,
   activityRef,
+  performanceScale,
 }: {
   pointerRef: MutableRefObject<{ x: number; y: number }>;
   palette: ThemePalette;
   activityRef: MutableRefObject<DnaActivitySignal>;
+  performanceScale: number;
 }) {
-  const count = 54;
+  const count = Math.max(24, Math.round(54 * performanceScale));
   const attributeRef = useRef<BufferAttribute>(null);
   const materialRef = useRef<PointsMaterial>(null);
   const positions = useMemo(() => new Float32Array(count * 3), [count]);
@@ -1434,7 +1530,7 @@ function DnaDustField({
       <pointsMaterial
         ref={materialRef}
         color={palette.accent2}
-        size={0.07}
+        size={MathUtils.lerp(0.068, 0.078, 1 - performanceScale)}
         sizeAttenuation
         depthWrite={false}
         transparent
@@ -1450,17 +1546,21 @@ function DnaShadowGradient({
   palette,
   pointerRef,
   activityRef,
+  performanceScale,
 }: {
   profile: ThemeMotionProfile;
   palette: ThemePalette;
   pointerRef: MutableRefObject<{ x: number; y: number }>;
   activityRef: MutableRefObject<DnaActivitySignal>;
+  performanceScale: number;
 }) {
   const shadowCoreRef = useRef<Mesh>(null)
   const shadowOuterRef = useRef<Mesh>(null)
   const shadowSweepRef = useRef<Mesh>(null)
   const tintA = useMemo(() => new Color(palette.accent), [palette.accent])
   const tintB = useMemo(() => new Color(palette.accent2), [palette.accent2])
+  const discSegments = performanceScale < 0.75 ? 32 : 48
+  const ringSegments = performanceScale < 0.75 ? 40 : 56
 
   useFrame((state, delta) => {
     const shadowCore = shadowCoreRef.current
@@ -1508,7 +1608,7 @@ function DnaShadowGradient({
   return (
     <group>
       <mesh ref={shadowOuterRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -3.5, -0.24]}>
-        <circleGeometry args={[1.15, 48]} />
+        <circleGeometry args={[1.15, discSegments]} />
         <meshStandardMaterial
           transparent
           opacity={0.08}
@@ -1520,7 +1620,7 @@ function DnaShadowGradient({
         />
       </mesh>
       <mesh ref={shadowCoreRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -3.46, -0.2]}>
-        <circleGeometry args={[1.05, 48]} />
+        <circleGeometry args={[1.05, discSegments]} />
         <meshStandardMaterial
           transparent
           opacity={0.14}
@@ -1532,7 +1632,7 @@ function DnaShadowGradient({
         />
       </mesh>
       <mesh ref={shadowSweepRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -3.4, -0.16]}>
-        <ringGeometry args={[0.52, 0.92, 56, 1, 0, Math.PI * 1.16]} />
+        <ringGeometry args={[0.52, 0.92, ringSegments, 1, 0, Math.PI * 1.16]} />
         <meshStandardMaterial
           transparent
           opacity={0.1}
@@ -1553,12 +1653,14 @@ function DnaHelixSystem({
   profile,
   palette,
   grade,
+  performanceScale,
 }: {
   pointerRef: MutableRefObject<{ x: number; y: number }>;
   scrollProgressRef: MutableRefObject<number>;
   profile: ThemeMotionProfile;
   palette: ThemePalette;
   grade: ThemeColorGrade;
+  performanceScale: number;
 }) {
   const rootRef = useRef<Group>(null);
   const backLayerRef = useRef<Group>(null);
@@ -1697,21 +1799,21 @@ function DnaHelixSystem({
       scale={[DNA_VISUAL_CONFIG.rootScale, DNA_VISUAL_CONFIG.rootScale, DNA_VISUAL_CONFIG.rootScale]}
     >
       <group ref={backLayerRef}>
-        <DnaShadowGradient profile={profile} palette={palette} pointerRef={pointerRef} activityRef={activityRef} />
-        <DnaDustField pointerRef={pointerRef} palette={palette} activityRef={activityRef} />
+        <DnaShadowGradient profile={profile} palette={palette} pointerRef={pointerRef} activityRef={activityRef} performanceScale={performanceScale} />
+        <DnaDustField pointerRef={pointerRef} palette={palette} activityRef={activityRef} performanceScale={performanceScale} />
       </group>
 
       <group ref={midLayerRef}>
-        <DnaHelixBorderAura palette={palette} activityRef={activityRef} />
-        <DnaCoreSphere palette={palette} profile={profile} activityRef={activityRef} />
-        <DnaCoreOrbitRings palette={palette} activityRef={activityRef} />
-        <DnaSphereLinks pointerRef={pointerRef} profile={profile} palette={palette} activityRef={activityRef} />
-        <DnaBackboneStrands pointerRef={pointerRef} profile={profile} palette={palette} grade={grade} activityRef={activityRef} />
+        <DnaHelixBorderAura palette={palette} activityRef={activityRef} performanceScale={performanceScale} />
+        <DnaCoreSphere palette={palette} profile={profile} activityRef={activityRef} performanceScale={performanceScale} />
+        <DnaCoreOrbitRings palette={palette} activityRef={activityRef} performanceScale={performanceScale} />
+        <DnaSphereLinks pointerRef={pointerRef} profile={profile} palette={palette} activityRef={activityRef} performanceScale={performanceScale} />
+        <DnaBackboneStrands pointerRef={pointerRef} profile={profile} palette={palette} grade={grade} activityRef={activityRef} performanceScale={performanceScale} />
       </group>
 
       <group ref={foregroundLayerRef}>
-        <DnaBasePairs pointerRef={pointerRef} profile={profile} palette={palette} grade={grade} activityRef={activityRef} />
-        <DnaFlowParticles pointerRef={pointerRef} profile={profile} palette={palette} grade={grade} activityRef={activityRef} />
+        <DnaBasePairs pointerRef={pointerRef} profile={profile} palette={palette} grade={grade} activityRef={activityRef} performanceScale={performanceScale} />
+        <DnaFlowParticles pointerRef={pointerRef} profile={profile} palette={palette} grade={grade} activityRef={activityRef} performanceScale={performanceScale} />
       </group>
 
       <group ref={glowKeyRef}>
@@ -1723,7 +1825,7 @@ function DnaHelixSystem({
   );
 }
 
-function CardMesh({ card, index, scrollProgressRef, pointerRef, profile }: CardMeshProps) {
+function CardMesh({ card, index, scrollProgressRef, pointerRef, profile, performanceScale }: CardMeshProps) {
   const groupRef = useRef<Group>(null);
   const imageLayerRef = useRef<Group>(null);
   const cardImageUrl = useMemo(() => normalizeCardImageUrl(card.imageUrl), [card.imageUrl]);
@@ -1738,6 +1840,7 @@ function CardMesh({ card, index, scrollProgressRef, pointerRef, profile }: CardM
   const cardWidth = 1.516;
   const cardHeight = 2.116;
   const cardAspect = cardWidth / cardHeight;
+  const anisotropy = Math.max(2, Math.round(8 * performanceScale));
 
   const texture = useMemo(() => {
     const nextTexture = rawTexture.clone();
@@ -1746,12 +1849,12 @@ function CardMesh({ card, index, scrollProgressRef, pointerRef, profile }: CardM
     nextTexture.wrapT = ClampToEdgeWrapping;
     nextTexture.minFilter = LinearMipmapLinearFilter;
     nextTexture.magFilter = LinearFilter;
-    nextTexture.anisotropy = 8;
+    nextTexture.anisotropy = anisotropy;
     const imageAspect = getTextureAspect(nextTexture, cardAspect);
     applyCoverUv(nextTexture, imageAspect, cardAspect);
     nextTexture.needsUpdate = true;
     return nextTexture;
-  }, [rawTexture, cardAspect]);
+  }, [rawTexture, cardAspect, anisotropy]);
 
   const backTexture = useMemo(() => {
     const nextTexture = rawBackTexture.clone();
@@ -1760,12 +1863,12 @@ function CardMesh({ card, index, scrollProgressRef, pointerRef, profile }: CardM
     nextTexture.wrapT = ClampToEdgeWrapping;
     nextTexture.minFilter = LinearMipmapLinearFilter;
     nextTexture.magFilter = LinearFilter;
-    nextTexture.anisotropy = 8;
+    nextTexture.anisotropy = anisotropy;
     const imageAspect = getTextureAspect(nextTexture, cardAspect);
     applyCoverUv(nextTexture, imageAspect, cardAspect);
     nextTexture.needsUpdate = true;
     return nextTexture;
-  }, [rawBackTexture, cardAspect]);
+  }, [rawBackTexture, cardAspect, anisotropy]);
 
   useEffect(() => {
     return () => {
@@ -1835,7 +1938,7 @@ function CardMesh({ card, index, scrollProgressRef, pointerRef, profile }: CardM
     // Self-rotation (continuous spinning idly) + responsive sway
     // Presence Envelope: Keep in "moving path mode" until 0.5% and 99.5% extremes
     const baseEnvelope = smoothstep(0.005, 0.05, scrollProgress) * (1 - smoothstep(0.95, 0.995, scrollProgress));
-    const motionEnvelope = Math.max(0.2, baseEnvelope) * profile.motionIntensity;
+    const motionEnvelope = Math.max(0.18, baseEnvelope) * profile.motionIntensity * MathUtils.lerp(0.78, 1, performanceScale);
 
     // Fade away the continuous / random spin at the extreme ends so they sit perfectly upright
     const idleRotFactor = smoothstep(0.01, 0.08, scrollProgress) * (1 - smoothstep(0.92, 0.99, scrollProgress));
@@ -1929,6 +2032,9 @@ function readThemeVisualConfig(): ThemeVisualConfig {
 
 export function FloatingCardScene({ cards, scrollProgressRef, pointerRef }: FloatingCardSceneProps) {
   const [themeConfig, setThemeConfig] = useState<ThemeVisualConfig>(readThemeVisualConfig);
+  const [performanceProfile, setPerformanceProfile] = useState<ScenePerformanceProfile>(readPerformanceProfile);
+  const [isPageVisible, setIsPageVisible] = useState(() => (typeof document === "undefined" ? true : document.visibilityState === "visible"));
+  const showDnaLayer = false;
 
   useEffect(() => {
     function syncThemeConfig() {
@@ -1946,6 +2052,29 @@ export function FloatingCardScene({ cards, scrollProgressRef, pointerRef }: Floa
     };
   }, []);
 
+  useEffect(() => {
+    function syncPerformanceProfile() {
+      setPerformanceProfile(readPerformanceProfile());
+    }
+
+    function onVisibilityChange() {
+      setIsPageVisible(document.visibilityState === "visible");
+    }
+
+    const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    syncPerformanceProfile();
+
+    reducedMotionQuery.addEventListener("change", syncPerformanceProfile);
+    window.addEventListener("resize", syncPerformanceProfile);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      reducedMotionQuery.removeEventListener("change", syncPerformanceProfile);
+      window.removeEventListener("resize", syncPerformanceProfile);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+
   return (
     <div className="floating-webgl-layer" style={{
       position: 'fixed',
@@ -1955,8 +2084,9 @@ export function FloatingCardScene({ cards, scrollProgressRef, pointerRef }: Floa
       opacity: 1
     }} aria-hidden="true">
       <Canvas
-        dpr={[1, 1.5]}
-        gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+        dpr={performanceProfile.dpr}
+        frameloop={isPageVisible ? "always" : "never"}
+        gl={{ antialias: performanceProfile.antialias, alpha: true, powerPreference: "high-performance" }}
         camera={{ position: [0, 0, 13], fov: 50 }}
         onCreated={({ gl }) => {
           gl.toneMapping = ACESFilmicToneMapping;
@@ -1970,23 +2100,28 @@ export function FloatingCardScene({ cards, scrollProgressRef, pointerRef }: Floa
         <pointLight position={[-3.5, -2.2, 4.8]} intensity={0.4} color={themeConfig.palette.accent2} />
         <pointLight position={[2.4, 1.2, 3.7]} intensity={0.34} color={themeConfig.palette.accent} />
 
-        <DnaHelixSystem
-          pointerRef={pointerRef}
-          scrollProgressRef={scrollProgressRef}
-          profile={themeConfig.profile}
-          palette={themeConfig.palette}
-          grade={themeConfig.grade}
-        />
-
-        <EffectComposer multisampling={0}>
-          <Bloom
-            intensity={1.28}
-            luminanceThreshold={0.16}
-            luminanceSmoothing={0.72}
-            mipmapBlur
-            radius={0.92}
+        {showDnaLayer ? (
+          <DnaHelixSystem
+            pointerRef={pointerRef}
+            scrollProgressRef={scrollProgressRef}
+            profile={themeConfig.profile}
+            palette={themeConfig.palette}
+            grade={themeConfig.grade}
+            performanceScale={performanceProfile.scale}
           />
-        </EffectComposer>
+        ) : null}
+
+        {performanceProfile.enableBloom ? (
+          <EffectComposer multisampling={0}>
+            <Bloom
+              intensity={MathUtils.lerp(0.82, 1.28, performanceProfile.scale)}
+              luminanceThreshold={0.16}
+              luminanceSmoothing={0.72}
+              mipmapBlur
+              radius={MathUtils.lerp(0.72, 0.92, performanceProfile.scale)}
+            />
+          </EffectComposer>
+        ) : null}
 
         {cards.slice(0, 4).map((card, index) => (
           <CardMesh
@@ -1996,6 +2131,7 @@ export function FloatingCardScene({ cards, scrollProgressRef, pointerRef }: Floa
             scrollProgressRef={scrollProgressRef}
             pointerRef={pointerRef}
             profile={themeConfig.profile}
+            performanceScale={performanceProfile.scale}
           />
         ))}
       </Canvas>

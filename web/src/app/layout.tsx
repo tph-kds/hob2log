@@ -36,7 +36,7 @@ export default function RootLayout({
       try {
         var themeKey = "hob2log-theme";
         var themeValue = localStorage.getItem(themeKey);
-        var allowedThemes = ["ocean", "sunset", "forest", "mono", "latte", "mocha", "sidewalk", "leather"];
+        var allowedThemes = ["ocean", "sunset", "forest", "dawn", "pearl", "mint", "eclipse", "mono", "latte", "mocha", "sidewalk", "leather"];
         var theme = allowedThemes.indexOf(themeValue || "") >= 0 ? themeValue : "ocean";
 
         var motionKey = "hob2log-motion";

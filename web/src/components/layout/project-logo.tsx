@@ -91,27 +91,51 @@ function computePoint(
 
 export function ProjectLogo() {
   const pathname = usePathname();
+  const isBlogArticle = pathname.startsWith("/blog/");
   const [isAtTop, setIsAtTop] = useState(true);
   const rootRef = useRef<HTMLAnchorElement | null>(null);
   const backCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const frontCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
+    if (isBlogArticle) {
+      return;
+    }
+
+    let raf = 0;
+    let scheduled = false;
+
     function syncTopState() {
-      setIsAtTop(window.scrollY <= 22);
+      scheduled = false;
+      const next = window.scrollY <= 22;
+      setIsAtTop((prev) => (prev === next ? prev : next));
+    }
+
+    function scheduleSyncTopState() {
+      if (scheduled) {
+        return;
+      }
+
+      scheduled = true;
+      raf = window.requestAnimationFrame(syncTopState);
     }
 
     syncTopState();
-    window.addEventListener("scroll", syncTopState, { passive: true });
-    window.addEventListener("resize", syncTopState);
+    window.addEventListener("scroll", scheduleSyncTopState, { passive: true });
+    window.addEventListener("resize", scheduleSyncTopState, { passive: true });
 
     return () => {
-      window.removeEventListener("scroll", syncTopState);
-      window.removeEventListener("resize", syncTopState);
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", scheduleSyncTopState);
+      window.removeEventListener("resize", scheduleSyncTopState);
     };
-  }, [pathname]);
+  }, [isBlogArticle, pathname]);
 
   useEffect(() => {
+    if (isBlogArticle || !isAtTop) {
+      return;
+    }
+
     const rootEl = rootRef.current;
     const backCanvas = backCanvasRef.current;
     const frontCanvas = frontCanvasRef.current;
@@ -149,11 +173,20 @@ export function ProjectLogo() {
     let height = 0;
     let raf = 0;
     let lastTime = performance.now();
+    const bounds = { left: 0, top: 0, width: 1, height: 1 };
+
+    function syncBounds() {
+      const rect = root.getBoundingClientRect();
+      bounds.left = rect.left;
+      bounds.top = rect.top;
+      bounds.width = Math.max(10, rect.width);
+      bounds.height = Math.max(10, rect.height);
+    }
 
     function resizeCanvases() {
-      const rect = root.getBoundingClientRect();
-      width = Math.max(10, rect.width);
-      height = Math.max(10, rect.height);
+      syncBounds();
+      width = bounds.width;
+      height = bounds.height;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
       for (const canvas of [back, front]) {
@@ -168,9 +201,8 @@ export function ProjectLogo() {
     }
 
     function handlePointerMove(event: PointerEvent) {
-      const rect = root.getBoundingClientRect();
-      pointer.xNormTarget = clamp((event.clientX - rect.left) / rect.width, 0, 1);
-      pointer.yNormTarget = clamp((event.clientY - rect.top) / rect.height, 0, 1);
+      pointer.xNormTarget = clamp((event.clientX - bounds.left) / bounds.width, 0, 1);
+      pointer.yNormTarget = clamp((event.clientY - bounds.top) / bounds.height, 0, 1);
     }
 
     function handlePointerLeave() {
@@ -265,17 +297,23 @@ export function ProjectLogo() {
     lastTime = performance.now();
     frame(lastTime);
 
-    window.addEventListener("resize", resizeCanvases);
-    window.addEventListener("pointermove", handlePointerMove, { passive: true });
-    window.addEventListener("pointerleave", handlePointerLeave, { passive: true });
+    root.addEventListener("pointerenter", syncBounds, { passive: true });
+    root.addEventListener("pointermove", handlePointerMove, { passive: true });
+    root.addEventListener("pointerleave", handlePointerLeave, { passive: true });
+    window.addEventListener("resize", resizeCanvases, { passive: true });
 
     return () => {
       cancelAnimationFrame(raf);
+      root.removeEventListener("pointerenter", syncBounds);
+      root.removeEventListener("pointermove", handlePointerMove);
+      root.removeEventListener("pointerleave", handlePointerLeave);
       window.removeEventListener("resize", resizeCanvases);
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerleave", handlePointerLeave);
     };
-  }, []);
+  }, [isAtTop, isBlogArticle]);
+
+  if (isBlogArticle) {
+    return null;
+  }
 
   return (
     <Link

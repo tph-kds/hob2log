@@ -1,7 +1,7 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { MarkdownRenderer } from "@/components/blog/markdown-renderer";
-import { LiquidSection } from "@/components/layout/liquid-section";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { isAdminSessionAuthorized } from "@/lib/admin-session";
 import { getPostBySlug, listPosts } from "@/lib/posts-store";
@@ -88,7 +88,7 @@ export default async function BlogPostPage({ params, searchParams }: BlogPostPag
   const query = await searchParams;
   const wantsPreview = query.preview === "1" || query.preview === "true";
   const canViewDraft = wantsPreview && await isAdminSessionAuthorized();
-  const allPosts = await listPosts({ includeDrafts: canViewDraft });
+  const allPosts = await listPosts({ includeDrafts: canViewDraft, includeContent: false });
   const post = await getPostBySlug(slug, { includeDrafts: canViewDraft });
 
   if (!post) {
@@ -101,7 +101,7 @@ export default async function BlogPostPage({ params, searchParams }: BlogPostPag
   return (
     <div className="page-shell">
       <main className="page-main mx-auto w-full max-w-6xl px-4 pb-10 pt-[4.5rem] sm:px-6 sm:pb-12 sm:pt-20 md:px-10 md:pt-24">
-        <LiquidSection className="rounded-3xl p-6 md:p-10">
+        <section className="liquid-panel rounded-3xl p-6 md:p-10">
           <p className="text-xs uppercase tracking-[0.18em] text-sky-200/85">Article Workspace</p>
 
           <nav aria-label="Breadcrumb" className="mt-4 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-xs text-sky-100/90">
@@ -131,11 +131,16 @@ export default async function BlogPostPage({ params, searchParams }: BlogPostPag
               <p className="mt-3 text-sm text-(--muted)">{post.tags.join(" · ")}</p>
 
               {post.coverImage ? (
-                <div
-                  className="mt-6 h-56 w-full rounded-2xl border border-white/10 bg-cover bg-center md:h-72"
-                  style={{ backgroundImage: `url(${post.coverImage})` }}
-                  aria-label={`Cover image for ${post.title}`}
-                />
+                <div className="relative mt-6 h-56 w-full overflow-hidden rounded-2xl border border-white/10 md:h-72">
+                  <Image
+                    src={post.coverImage}
+                    alt={`Cover image for ${post.title}`}
+                    fill
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 75vw, 960px"
+                    className="object-cover"
+                    priority
+                  />
+                </div>
               ) : null}
 
               <div className="mt-8">
@@ -149,9 +154,18 @@ export default async function BlogPostPage({ params, searchParams }: BlogPostPag
                     {post.media.map((item, index) => (
                       <figure key={`${item.url}-${index}`} className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-3">
                         {item.type === "video" ? (
-                          <video src={item.url} controls className="h-auto w-full rounded-xl" />
+                          <video src={item.url} controls preload="metadata" className="h-auto w-full rounded-xl" />
                         ) : (
-                          <img src={item.url} alt={item.alt || post.title} className="h-auto w-full rounded-xl object-cover" />
+                          <div className="relative h-56 w-full overflow-hidden rounded-xl sm:h-64">
+                            <Image
+                              src={item.url}
+                              alt={item.alt || post.title}
+                              fill
+                              loading="lazy"
+                              sizes="(max-width: 768px) 100vw, 50vw"
+                              className="object-cover"
+                            />
+                          </div>
                         )}
                         {item.caption ? <figcaption className="mt-2 text-xs text-sky-100/75">{item.caption}</figcaption> : null}
                       </figure>
@@ -227,7 +241,7 @@ export default async function BlogPostPage({ params, searchParams }: BlogPostPag
               </section>
             </aside>
           </div>
-        </LiquidSection>
+        </section>
       </main>
 
       <SiteFooter />

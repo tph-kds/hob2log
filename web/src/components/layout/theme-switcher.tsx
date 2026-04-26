@@ -2,6 +2,8 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useMusicPlayer } from "@/components/music/music-provider";
 
 const THEME_STORAGE_KEY = "hob2log-theme";
 const MOTION_STORAGE_KEY = "hob2log-motion";
@@ -22,6 +24,10 @@ const themeLibrary: ThemeOption[] = [
   { id: "ocean", label: "Ocean Glass", swatch: "linear-gradient(130deg, #7fd8ff, #99ffd9)" },
   { id: "sunset", label: "Sunset Ember", swatch: "linear-gradient(130deg, #ffbf7d, #ff6f95)" },
   { id: "forest", label: "Forest Mist", swatch: "linear-gradient(130deg, #9be9bc, #79d8ff)" },
+  { id: "dawn", label: "Dawn Bloom", swatch: "linear-gradient(130deg, #ffd8a8, #ffacc9)" },
+  { id: "pearl", label: "Pearl Sky", swatch: "linear-gradient(130deg, #c5e9ff, #d5f3ff)" },
+  { id: "mint", label: "Mint Paper", swatch: "linear-gradient(130deg, #c8f2d7, #eaf8d7)" },
+  { id: "eclipse", label: "Eclipse Flux", swatch: "linear-gradient(130deg, #5a5cff, #2ed39f)" },
   { id: "mono", label: "Mono Aurora", swatch: "linear-gradient(130deg, #c8d3e6, #9bb3d3)" },
   { id: "latte", label: "Latte Pastel", swatch: "linear-gradient(130deg, #f6e6cf, #d9d9f8)" },
   { id: "mocha", label: "Mocha Night", swatch: "linear-gradient(130deg, #8c6f5d, #6b78b8)" },
@@ -62,6 +68,9 @@ function setDocumentCardTopic(topic: CardTopicOption) {
 }
 
 export function ThemeSwitcher() {
+  const pathname = usePathname();
+  const isBlogArticle = pathname.startsWith("/blog/");
+  const { isPanelVisible } = useMusicPlayer();
   const [activeTheme, setActiveTheme] = useState(() => {
     if (typeof document === "undefined") {
       return "ocean";
@@ -140,6 +149,10 @@ export function ThemeSwitcher() {
     setCardTopic(topic);
     setDocumentCardTopic(topic);
     localStorage.setItem(CARD_TOPIC_STORAGE_KEY, topic);
+  }
+
+  if (isBlogArticle || isPanelVisible) {
+    return null;
   }
 
   return (

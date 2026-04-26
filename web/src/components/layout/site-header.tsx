@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useMusicPlayer } from "@/components/music/music-provider";
 
@@ -32,7 +32,17 @@ export function SiteHeader() {
   const [isMobileHeaderVisible, setIsMobileHeaderVisible] = useState(true);
   const prefersReducedMotion = useReducedMotion();
   const pathname = usePathname();
+  const isBlogArticle = pathname.startsWith("/blog/");
   const { isPanelVisible, isExpanded, togglePanelVisible } = useMusicPlayer();
+  const mobileLastYRef = useRef(0);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-reading-mode", isBlogArticle ? "article" : "default");
+
+    return () => {
+      document.documentElement.setAttribute("data-reading-mode", "default");
+    };
+  }, [isBlogArticle]);
 
   // ── 1. Responsive breakpoint listener ──────────────────────────────────────
   useEffect(() => {
@@ -45,71 +55,62 @@ export function SiteHeader() {
     return () => mq.removeEventListener("change", sync);
   }, []);
 
-  // ── 2. Scroll detector: dock ↔ un-dock ──────────────────────────────────────
   useEffect(() => {
-    if (!isDesktop) {
-      return;
-    }
+    let raf = 0;
+    let scheduled = false;
+    const mobileMq = window.matchMedia("(max-width: 768px)");
 
-    function evaluate() {
-      // By using window.scrollY, it will always be horizontal when at the top of the page
-      // (Scroll position 0), and correctly vertical continuously when scrolling down.
-      setIsDocked(window.scrollY > 80);
-    }
+    function applyScrollState() {
+      scheduled = false;
+      const y = window.scrollY;
 
-    // Call once immediately, and also set a slight delay to account for Next.js 
-    // scroll-to-top rendering upon navigation route change.
-    evaluate();
-    const timeout = setTimeout(evaluate, 100);
+      if (isDesktop) {
+        const nextDocked = y > 80;
+        setIsDocked((prev) => (prev === nextDocked ? prev : nextDocked));
+      } else {
+        setIsDocked(false);
+      }
 
-    window.addEventListener("scroll", evaluate, { passive: true });
-    window.addEventListener("resize", evaluate);
-    return () => {
-      clearTimeout(timeout);
-      window.removeEventListener("scroll", evaluate);
-      window.removeEventListener("resize", evaluate);
-    };
-  }, [isDesktop, pathname]);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 768px)");
-    let lastY = window.scrollY;
-
-    function handleMobileHeaderVisibility() {
-      if (!mq.matches) {
+      if (!mobileMq.matches) {
+        mobileLastYRef.current = y;
         setIsMobileHeaderVisible(true);
         return;
       }
 
-      const nextY = window.scrollY;
-      const delta = nextY - lastY;
+      const delta = y - mobileLastYRef.current;
+      mobileLastYRef.current = y;
 
-      if (nextY <= 32) {
+      if (y <= 32) {
         setIsMobileHeaderVisible(true);
       } else if (delta > 7) {
         setIsMobileHeaderVisible(false);
       } else if (delta < -7) {
         setIsMobileHeaderVisible(true);
       }
-
-      lastY = nextY;
     }
 
-    function syncOnResize() {
-      if (!mq.matches) {
-        setIsMobileHeaderVisible(true);
+    function scheduleApply() {
+      if (scheduled) {
+        return;
       }
+
+      scheduled = true;
+      raf = window.requestAnimationFrame(applyScrollState);
     }
 
-    handleMobileHeaderVisibility();
-    window.addEventListener("scroll", handleMobileHeaderVisibility, { passive: true });
-    window.addEventListener("resize", syncOnResize);
+    mobileLastYRef.current = window.scrollY;
+    applyScrollState();
+    const delayedSync = window.setTimeout(scheduleApply, 100);
+    window.addEventListener("scroll", scheduleApply, { passive: true });
+    window.addEventListener("resize", scheduleApply, { passive: true });
 
     return () => {
-      window.removeEventListener("scroll", handleMobileHeaderVisibility);
-      window.removeEventListener("resize", syncOnResize);
+      window.clearTimeout(delayedSync);
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", scheduleApply);
+      window.removeEventListener("resize", scheduleApply);
     };
-  }, [pathname]);
+  }, [isDesktop, pathname]);
 
   const useVerticalDock = isDesktop && isDocked;
   const target = useVerticalDock ? POS_VERTICAL : POS_HORIZONTAL;
@@ -135,7 +136,7 @@ export function SiteHeader() {
         initial={POS_HORIZONTAL}
         animate={target}
         transition={
-          prefersReducedMotion
+          prefersReducedMotion || isBlogArticle
             ? { duration: 0 }
             : { type: "spring", stiffness: 200, damping: 26, mass: 0.85 }
         }

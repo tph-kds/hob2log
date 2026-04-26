@@ -28,6 +28,11 @@ function smoothstep(edge0: number, edge1: number, value: number) {
 
 export function LiquidDistortionCanvas({ targetRef, radius = 120, isActive }: LiquidDistortionCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const activeRef = useRef(isActive);
+
+  useEffect(() => {
+    activeRef.current = isActive;
+  }, [isActive]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -168,6 +173,7 @@ export function LiquidDistortionCanvas({ targetRef, radius = 120, isActive }: Li
     function tick() {
       drawingContext.clearRect(0, 0, width, height);
       drawingContext.globalCompositeOperation = "lighter";
+      const now = performance.now();
 
       let hasResidualMotion = false;
 
@@ -179,7 +185,7 @@ export function LiquidDistortionCanvas({ targetRef, radius = 120, isActive }: Li
 
         let influence = 0;
 
-        if (pointer.inside && isActive) {
+        if (pointer.inside && activeRef.current) {
           const edgeBlendStart = radius * 0.72;
           influence = 1 - smoothstep(edgeBlendStart, radius, distance);
         }
@@ -188,7 +194,7 @@ export function LiquidDistortionCanvas({ targetRef, radius = 120, isActive }: Li
           const invDistance = 1 / Math.max(1, distance);
           const nx = dx * invDistance;
           const ny = dy * invDistance;
-          const swirl = (Math.sin(particle.seed + performance.now() * 0.005) * 0.5 + 0.5) * influence;
+          const swirl = (Math.sin(particle.seed + now * 0.005) * 0.5 + 0.5) * influence;
 
           particle.vx += nx * influence * 1.6 + -ny * swirl * 0.9;
           particle.vy += ny * influence * 1.6 + nx * swirl * 0.9;
@@ -257,7 +263,7 @@ export function LiquidDistortionCanvas({ targetRef, radius = 120, isActive }: Li
       target.removeEventListener("pointermove", handlePointerMove);
       target.removeEventListener("pointerleave", handlePointerLeave);
     };
-  }, [isActive, radius, targetRef]);
+  }, [radius, targetRef]);
 
   return <canvas ref={canvasRef} className="title-liquid-layer" aria-hidden="true" />;
 }

@@ -41,6 +41,10 @@ function getThemePalette(): ThemePalette {
     ocean:    [[79,209,255],[144,247,206],[150,180,255],[220,240,255],[100,200,255]],
     sunset:   [[255,132,188],[255,211,122],[238,130,255],[255,200,160],[255,160,120]],
     forest:   [[102,227,189],[156,232,255],[140,220,130],[200,255,210],[120,200,170]],
+    dawn:     [[255,146,123],[255,178,142],[255,165,201],[255,222,168],[255,233,205]],
+    pearl:    [[124,184,232],[145,208,246],[190,224,248],[218,241,255],[160,202,235]],
+    mint:     [[92,176,138],[112,193,152],[146,205,118],[181,219,166],[112,179,164]],
+    eclipse:  [[104,112,255],[111,214,255],[82,227,176],[197,169,255],[145,250,225]],
     mono:     [[158,199,255],[184,214,255],[200,210,240],[220,230,250],[180,195,220]],
     latte:    [[181,123,86],[159,141,197],[220,170,130],[200,160,120],[180,150,200]],
     mocha:    [[137,180,250],[166,227,161],[203,166,247],[190,200,255],[160,210,200]],
@@ -219,10 +223,32 @@ export function ParticleSmokeCanvas({
   const activeRef = useRef(isActive);
   const posRef = useRef({ x: 0, y: 0 });
   const modeRef = useRef(mode);
+  const paletteRef = useRef<ThemePalette>(getThemePalette());
+  const startLoopRef = useRef<(() => void) | null>(null);
 
   // Keep refs in sync
   useEffect(() => { activeRef.current = isActive; }, [isActive]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const root = document.documentElement;
+
+    const syncPalette = () => {
+      paletteRef.current = getThemePalette();
+    };
+
+    syncPalette();
+    const observer = new MutationObserver(syncPalette);
+    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     const targetNode = targetRef.current;
@@ -274,11 +300,20 @@ export function ParticleSmokeCanvas({
     if (!ctx) return;
     const context = ctx;
 
+    function startLoop() {
+      if (rafRef.current !== 0) {
+        return;
+      }
+
+      rafRef.current = requestAnimationFrame(loop);
+    }
+
     function loop() {
+      rafRef.current = 0;
       context.clearRect(0, 0, canvasElement.width, canvasElement.height);
       context.shadowBlur = 0;
 
-      const palette = getThemePalette();
+      const palette = paletteRef.current;
       const { x: cx, y: cy } = posRef.current;
 
       // Spawn particles when active
@@ -317,12 +352,31 @@ export function ParticleSmokeCanvas({
         return true;
       });
 
-      rafRef.current = requestAnimationFrame(loop);
+      if (activeRef.current || particlesRef.current.length > 0) {
+        rafRef.current = requestAnimationFrame(loop);
+      }
     }
 
-    rafRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafRef.current);
+    startLoopRef.current = startLoop;
+    startLoop();
+
+    return () => {
+      startLoopRef.current = null;
+
+      if (rafRef.current !== 0) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
+    };
   }, [radius]);
+
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
+    startLoopRef.current?.();
+  }, [isActive, mode]);
 
   return (
     <canvas

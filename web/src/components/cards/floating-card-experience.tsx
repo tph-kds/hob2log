@@ -49,21 +49,24 @@ function clamp(value: number, min: number, max: number) {
 
 export function FloatingCardExperience({ cards }: FloatingCardExperienceProps) {
   const [mode, setMode] = useState<RenderMode>("loading");
-  const [fallbackPointerState, setFallbackPointerState] = useState<PointerState>({ x: 0, y: 0 });
+  const pointerTargetRef = useRef<PointerState>({ x: 0, y: 0 });
   const pointerRef = useRef<PointerState>({ x: 0, y: 0 });
   const scrollProgressRef = useRef(0);
 
   useEffect(() => {
     const frameId = window.requestAnimationFrame(() => {
-      setMode(getRenderMode());
+      const nextMode = getRenderMode();
+      setMode((prev) => (prev === nextMode ? prev : nextMode));
     });
 
     function onResize() {
-      setMode(getRenderMode());
+      const nextMode = getRenderMode();
+      setMode((prev) => (prev === nextMode ? prev : nextMode));
     }
 
     function onMotionPreferenceChange() {
-      setMode(getRenderMode());
+      const nextMode = getRenderMode();
+      setMode((prev) => (prev === nextMode ? prev : nextMode));
     }
 
     window.addEventListener("resize", onResize);
@@ -79,59 +82,81 @@ export function FloatingCardExperience({ cards }: FloatingCardExperienceProps) {
   }, []);
 
   useEffect(() => {
-    if (mode !== "webgl") {
-      return;
-    }
+    let raf = 0;
+    let scrollDirty = true;
+    let idleFrames = 0;
 
-    let ticking = false;
-
-    function onScroll() {
-      if (ticking) {
+    function requestTick() {
+      if (raf !== 0) {
         return;
       }
 
-      ticking = true;
-
-      window.requestAnimationFrame(() => {
-        const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-        scrollProgressRef.current = clamp(window.scrollY / maxScroll, 0, 1);
-        ticking = false;
-      });
+      raf = window.requestAnimationFrame(tick);
     }
 
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
+    function updateScrollProgress() {
+      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      scrollProgressRef.current = clamp(window.scrollY / maxScroll, 0, 1);
+      scrollDirty = false;
+    }
 
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-    };
-  }, [mode]);
-
-  useEffect(() => {
     function onPointerMove(event: PointerEvent) {
       const x = clamp(event.clientX / window.innerWidth, 0, 1) * 2 - 1;
       const y = clamp(event.clientY / window.innerHeight, 0, 1) * 2 - 1;
-      pointerRef.current.x = x;
-      pointerRef.current.y = y;
-
-      if (mode !== "webgl") {
-        setFallbackPointerState({ x, y });
-      }
+      pointerTargetRef.current.x = x;
+      pointerTargetRef.current.y = y;
+      requestTick();
     }
 
     function onPointerLeave() {
-      pointerRef.current.x = 0;
-      pointerRef.current.y = 0;
+      pointerTargetRef.current.x = 0;
+      pointerTargetRef.current.y = 0;
+      requestTick();
+    }
 
-      if (mode !== "webgl") {
-        setFallbackPointerState({ x: 0, y: 0 });
+    function onScroll() {
+      scrollDirty = true;
+      requestTick();
+    }
+
+    function tick() {
+      raf = 0;
+      const smoothing = mode === "webgl" ? 0.16 : 0.22;
+      const prevX = pointerRef.current.x;
+      const prevY = pointerRef.current.y;
+
+      pointerRef.current.x += (pointerTargetRef.current.x - pointerRef.current.x) * smoothing;
+      pointerRef.current.y += (pointerTargetRef.current.y - pointerRef.current.y) * smoothing;
+
+      if (scrollDirty) {
+        updateScrollProgress();
+      }
+
+      const pointerDelta = Math.abs(pointerRef.current.x - prevX) + Math.abs(pointerRef.current.y - prevY);
+      const isStillActive = scrollDirty || pointerDelta > 0.0008;
+
+      if (isStillActive) {
+        idleFrames = 0;
+        requestTick();
+        return;
+      }
+
+      idleFrames += 1;
+
+      if (idleFrames < 20) {
+        requestTick();
       }
     }
 
+    updateScrollProgress();
+    requestTick();
+    window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("pointermove", onPointerMove, { passive: true });
     window.addEventListener("pointerleave", onPointerLeave);
 
     return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerleave", onPointerLeave);
     };
@@ -142,7 +167,7 @@ export function FloatingCardExperience({ cards }: FloatingCardExperienceProps) {
   }
 
   if (mode === "fallback") {
-    return <FloatingCardField cards={cards} pointerState={fallbackPointerState} />;
+    return <FloatingCardField cards={cards} pointerRef={pointerRef} scrollProgressRef={scrollProgressRef} />;
   }
 
   return null;

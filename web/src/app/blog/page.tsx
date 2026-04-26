@@ -1,18 +1,17 @@
 import { MagneticCardLink } from "@/components/cards/magnetic-card";
-import { LiquidSection } from "@/components/layout/liquid-section";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { listPosts } from "@/lib/posts-store";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 export default async function BlogPage() {
-  const posts = await listPosts();
+  const posts = await listPosts({ includeContent: false });
 
   return (
     <div className="page-shell">
 
       <main className="page-main mx-auto w-full max-w-5xl px-4 pb-10 pt-[4.5rem] sm:px-6 sm:pb-12 sm:pt-20 md:px-10 md:pt-24">
-        <LiquidSection className="rounded-3xl p-6 md:p-8">
+        <section className="liquid-panel rounded-3xl p-6 md:p-8">
           <p className="text-xs uppercase tracking-[0.18em] text-sky-200/85">Knowledge Archive</p>
           <h1 className="mt-2 text-4xl font-semibold">Blog Logs</h1>
           <p className="mt-2 max-w-2xl text-sm text-(--muted)">
@@ -41,7 +40,7 @@ export default async function BlogPage() {
               </MagneticCardLink>
             ))}
           </div>
-        </LiquidSection>
+        </section>
       </main>
 
       <SiteFooter />

@@ -6,10 +6,10 @@ import { LiquidSection } from "@/components/layout/liquid-section";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { listPosts } from "@/lib/posts-store";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 export default async function Home() {
-  const posts = await listPosts();
+  const posts = await listPosts({ includeContent: false });
   const featuredPosts = Array.isArray(posts) ? posts.slice(0, 3) : [];
   const yugiohCards = [
     {
@@ -114,7 +114,7 @@ export default async function Home() {
             <div className="absolute -bottom-28 left-1/3 h-60 w-60 rounded-full bg-emerald-300/20 blur-3xl" />
           </div>
 
-          <p className="relative mb-4 text-xs uppercase tracking-[0.24em] text-sky-200/85">Mysterious Private Workspace</p>
+          <p className="theme-kicker relative mb-4 text-xs uppercase tracking-[0.24em]">Mysterious Private Workspace</p>
           <h1 className="relative max-w-4xl text-4xl font-semibold leading-tight md:text-6xl">
             Quietly capture ideas, transform them into projects, and keep every decision searchable.
           </h1>
@@ -123,10 +123,10 @@ export default async function Home() {
           </p>
 
           <div className="relative mt-8 flex flex-wrap gap-3">
-            <Link className="dynamic-theme-button rounded-full px-6 py-3 font-semibold text-slate-950" href="/blog">
+            <Link className="dynamic-theme-button theme-solid-button-text rounded-full px-6 py-3 font-semibold" href="/blog">
               Start Writing
             </Link>
-            <Link className="dynamic-theme-button-outline rounded-full px-6 py-3 font-medium text-slate-100" href="/projects">
+            <Link className="dynamic-theme-button-outline theme-outline-button-text rounded-full px-6 py-3 font-medium" href="/projects">
               Review Projects
             </Link>
           </div>
@@ -158,19 +158,19 @@ export default async function Home() {
                 <MagneticCardLink
                   key={post.slug}
                   href={`/blog/${post.slug}`}
-                  className="rounded-2xl border border-white/10 bg-white/5 p-4"
+                  className="theme-soft-card rounded-2xl p-4"
                 >
                   {post.coverImage ? (
                     <div
-                      className="mb-3 h-40 w-full rounded-xl border border-white/10 bg-cover bg-center"
+                      className="theme-soft-card mb-3 h-40 w-full rounded-xl bg-cover bg-center"
                       style={{ backgroundImage: `url(${post.coverImage})` }}
                       aria-label={`Cover image for ${post.title}`}
                     />
                   ) : post.media?.[0]?.type === "video" ? (
-                    <video src={post.media[0].url} controls className="mb-3 h-40 w-full rounded-xl border border-white/10 object-cover" />
+                    <video src={post.media[0].url} controls className="theme-soft-card mb-3 h-40 w-full rounded-xl object-cover" />
                   ) : post.media?.[0]?.url ? (
                     <div
-                      className="mb-3 h-40 w-full rounded-xl border border-white/10 bg-cover bg-center"
+                      className="theme-soft-card mb-3 h-40 w-full rounded-xl bg-cover bg-center"
                       style={{ backgroundImage: `url(${post.media[0].url})` }}
                       aria-label={`Media preview for ${post.title}`}
                     />
@@ -192,7 +192,7 @@ export default async function Home() {
             <p className="mt-3 text-sm text-(--muted)">
               Floating cards create your mysterious atmosphere without reducing readability. Keep motion decorative, never informational.
             </p>
-            <div className="mt-6 rounded-2xl border border-white/15 bg-white/5 p-4 text-sm text-sky-50/85">
+            <div className="theme-soft-note mt-6 rounded-2xl p-4 text-sm">
               Productivity tip: publish one short build log at the end of every coding session, even if the feature is incomplete.
             </div>
           </LiquidSection>
@@ -201,16 +201,16 @@ export default async function Home() {
         <LiquidSection className="rounded-3xl p-6 md:p-8">
           <h2 className="text-2xl font-semibold">Execution Blueprint</h2>
           <div className="mt-5 grid gap-4 text-sm text-(--muted) md:grid-cols-3">
-            <article className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <h3 className="text-base font-semibold text-sky-100">Story + Code</h3>
+            <article className="theme-soft-card rounded-2xl p-4">
+              <h3 className="text-base font-semibold text-(--foreground)">Story + Code</h3>
               <p className="mt-2">Log what you tried, why you chose it, and what changed after testing.</p>
             </article>
-            <article className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <h3 className="text-base font-semibold text-sky-100">Media Pipeline</h3>
+            <article className="theme-soft-card rounded-2xl p-4">
+              <h3 className="text-base font-semibold text-(--foreground)">Media Pipeline</h3>
               <p className="mt-2">Use optimized assets and consistent cover ratios for a clean index and quick scanning.</p>
             </article>
-            <article className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <h3 className="text-base font-semibold text-sky-100">Balanced Motion</h3>
+            <article className="theme-soft-card rounded-2xl p-4">
+              <h3 className="text-base font-semibold text-(--foreground)">Balanced Motion</h3>
               <p className="mt-2">Maintain depth effects on desktop with reduced-motion fallback and mobile-friendly simplicity.</p>
             </article>
           </div>

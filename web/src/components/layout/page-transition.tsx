@@ -10,6 +10,7 @@ interface PageTransitionProps {
 
 export function PageTransition({ children }: PageTransitionProps) {
   const pathname = usePathname();
+  const isBlogArticle = pathname.startsWith("/blog/");
   const prevRef = useRef(pathname);
   const [sweeping, setSweeping] = useState(false);
 
@@ -26,15 +27,15 @@ export function PageTransition({ children }: PageTransitionProps) {
     <>
       <motion.div
         key={pathname}
-        initial={{ opacity: 0, filter: "blur(6px)", y: 10 }}
-        animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
-        transition={{ duration: 0.44, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
+        initial={isBlogArticle ? { opacity: 0, y: 6 } : { opacity: 0, filter: "blur(6px)", y: 10 }}
+        animate={isBlogArticle ? { opacity: 1, y: 0 } : { opacity: 1, filter: "blur(0px)", y: 0 }}
+        transition={isBlogArticle ? { duration: 0.2, ease: "easeOut" } : { duration: 0.44, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
       >
         {children}
       </motion.div>
 
       <AnimatePresence>
-        {sweeping && (
+        {sweeping && !isBlogArticle && (
           <motion.div
             key="page-sweep"
             className="page-transition-sweep"

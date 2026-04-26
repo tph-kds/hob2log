@@ -20,6 +20,8 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
   const dropletTimerRef = useRef<number[]>([]);
   const lastBurstAtRef = useRef(0);
   const burstIdRef = useRef(0);
+  const pointerRafRef = useRef<number | null>(null);
+  const pendingPointerRef = useRef<{ x: number; y: number } | null>(null);
   const prefersReducedMotion = useReducedMotion();
   const [isCinematicIntroEnabledState, setIsCinematicIntroEnabledState] = useState(() => {
     if (typeof document === "undefined") {
@@ -32,8 +34,8 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
 
   const rotateXValue = useMotionValue(0);
   const rotateYValue = useMotionValue(0);
-  const glowX = useMotionValue(0.5);
-  const glowY = useMotionValue(0.5);
+  const cursorXPx = useMotionValue(0);
+  const cursorYPx = useMotionValue(0);
   const shiftX = useMotionValue(0);
   const shiftY = useMotionValue(0);
   const [isHeroPointerInside, setIsHeroPointerInside] = useState(false);
@@ -50,14 +52,10 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
   const rotateY = useSpring(rotateYValue, { stiffness: 260, damping: 24, mass: 0.5 });
   const dnaProgress = useSpring(scrollYProgress, { stiffness: 110, damping: 22, mass: 0.5 });
   const depth = useTransform(rotateY, [-8, 8], [-14, 14]);
-  const cursorX = useSpring(glowX, { stiffness: 360, damping: 28, mass: 0.38 });
-  const cursorY = useSpring(glowY, { stiffness: 360, damping: 28, mass: 0.38 });
-  const cursorXPercentValue = useTransform(cursorX, (value) => value * 100);
-  const cursorYPercentValue = useTransform(cursorY, (value) => value * 100);
   const parallaxX = useSpring(shiftX, { stiffness: 220, damping: 24, mass: 0.55 });
   const parallaxY = useSpring(shiftY, { stiffness: 220, damping: 24, mass: 0.55 });
-  const cursorXPercent = useMotionTemplate`${cursorXPercentValue}%`;
-  const cursorYPercent = useMotionTemplate`${cursorYPercentValue}%`;
+  const cursorXPxValue = useMotionTemplate`${cursorXPx}px`;
+  const cursorYPxValue = useMotionTemplate`${cursorYPx}px`;
   const shiftXPx = useMotionTemplate`${parallaxX}px`;
   const shiftYPx = useMotionTemplate`${parallaxY}px`;
   const heroProgress = useTransform(dnaProgress, [0, 1], [0, 1]);
@@ -106,6 +104,10 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
 
   useEffect(() => {
     return () => {
+      if (pointerRafRef.current !== null) {
+        window.cancelAnimationFrame(pointerRafRef.current);
+      }
+
       dropletTimerRef.current.forEach((timerId) => {
         window.clearTimeout(timerId);
       });
@@ -148,19 +150,32 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
       return;
     }
 
-    const bounds = heroRef.current.getBoundingClientRect();
-    const pointerX = event.clientX - bounds.left;
-    const pointerY = event.clientY - bounds.top;
-    const normalizedX = (pointerX / bounds.width) * 2 - 1;
-    const normalizedY = (pointerY / bounds.height) * 2 - 1;
+    pendingPointerRef.current = { x: event.clientX, y: event.clientY };
 
-    rotateYValue.set(normalizedX * 8);
-    rotateXValue.set(normalizedY * -7);
-    glowX.set(pointerX / bounds.width);
-    glowY.set(pointerY / bounds.height);
-    shiftX.set(normalizedX * 18);
-    shiftY.set(normalizedY * 14);
-    setIsHeroPointerInside(true);
+    if (pointerRafRef.current !== null) {
+      return;
+    }
+
+    pointerRafRef.current = window.requestAnimationFrame(() => {
+      pointerRafRef.current = null;
+
+      if (!heroRef.current || !pendingPointerRef.current) {
+        return;
+      }
+
+      const bounds = heroRef.current.getBoundingClientRect();
+      const pointerX = pendingPointerRef.current.x - bounds.left;
+      const pointerY = pendingPointerRef.current.y - bounds.top;
+      const normalizedX = (pointerX / bounds.width) * 2 - 1;
+      const normalizedY = (pointerY / bounds.height) * 2 - 1;
+
+      rotateYValue.set(normalizedX * 8);
+      rotateXValue.set(normalizedY * -7);
+      cursorXPx.set(pointerX);
+      cursorYPx.set(pointerY);
+      shiftX.set(normalizedX * 18);
+      shiftY.set(normalizedY * 14);
+    });
   }
 
   function spawnDropletBurst(event: PointerEvent<HTMLElement>) {
@@ -207,8 +222,20 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
 
     setDroplets((current) => {
       const merged = [...current, ...newBursts];
-      return merged.length > 52 ? merged.slice(merged.length - 52) : merged;
+      return merged.length > 28 ? merged.slice(merged.length - 28) : merged;
     });
+  }
+
+  function handleHeroPointerEnter(event: PointerEvent<HTMLElement>) {
+    setIsHeroPointerInside(true);
+
+    if (!heroRef.current) {
+      return;
+    }
+
+    const bounds = heroRef.current.getBoundingClientRect();
+    cursorXPx.set(event.clientX - bounds.left);
+    cursorYPx.set(event.clientY - bounds.top);
   }
 
   function handleTitlePointerMove(event: PointerEvent<HTMLElement>) {
@@ -225,6 +252,13 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
   }
 
   function handleHeroPointerLeave() {
+    pendingPointerRef.current = null;
+
+    if (pointerRafRef.current !== null) {
+      window.cancelAnimationFrame(pointerRafRef.current);
+      pointerRafRef.current = null;
+    }
+
     setIsHeroPointerInside(false);
     setIsTitleFocus(false);
 
@@ -234,8 +268,8 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
 
     rotateXValue.set(0);
     rotateYValue.set(0);
-    glowX.set(0.5);
-    glowY.set(0.5);
+    cursorXPx.set(0);
+    cursorYPx.set(0);
     shiftX.set(0);
     shiftY.set(0);
   }
@@ -244,6 +278,7 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
     <motion.section
       ref={heroRef}
       className={`blog-landing-hero rounded-3xl ${isHeroPointerInside ? "is-hero-hover" : ""} ${isTitleFocus ? "is-title-focus" : ""} `}
+      onPointerEnter={handleHeroPointerEnter}
       onPointerMove={handleHeroPointerMove}
       onPointerLeave={handleHeroPointerLeave}
       initial={prefersReducedMotion ? false : { opacity: 0, y: 16 }}
@@ -252,8 +287,8 @@ export function BlogLandingHero({ ctaHref = "#blog-entries", ctaLabel = "Explore
       style={{
         rotateX: prefersReducedMotion ? 0 : rotateX,
         rotateY: prefersReducedMotion ? 0 : rotateY,
-        "--hero-cursor-x": cursorXPercent,
-        "--hero-cursor-y": cursorYPercent,
+        "--hero-cursor-x-px": cursorXPxValue,
+        "--hero-cursor-y-px": cursorYPxValue,
         "--hero-shift-x": prefersReducedMotion ? "0px" : shiftXPx,
         "--hero-shift-y": prefersReducedMotion ? "0px" : shiftYPx,
         "--hero-progress": heroProgress,

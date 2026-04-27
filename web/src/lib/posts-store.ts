@@ -27,6 +27,29 @@ interface PostRow {
 
 const runtimePosts: Post[] = [];
 
+function toSafeAssetUrl(value: string | null | undefined) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("/")) {
+    return trimmed;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeSlug(value: string) {
   return value
     .trim()
@@ -59,26 +82,36 @@ function mapPostRow(row: PostRow): Post {
     summary: row.summary,
     createdAt: row.created_at,
     tags: Array.isArray(row.tags) ? row.tags : [],
-    coverImage: row.cover_image ?? undefined,
-    media: Array.isArray(row.media) ? row.media : [],
+    coverImage: toSafeAssetUrl(row.cover_image ?? undefined) ?? undefined,
+    media: normalizeMedia(Array.isArray(row.media) ? row.media : undefined),
     published: row.published ?? true,
     content: typeof row.content === "string" ? row.content : "",
   };
 }
 
-function normalizeMedia(media: PostMedia[] | undefined) {
+function normalizeMedia(media: PostMedia[] | undefined): PostMedia[] {
   if (!Array.isArray(media)) {
     return [];
   }
 
   return media
-    .filter((item) => item && (item.type === "image" || item.type === "video") && Boolean(item.url?.trim()))
-    .map((item) => ({
-      type: item.type,
-      url: item.url.trim(),
-      alt: item.alt?.trim() || undefined,
-      caption: item.caption?.trim() || undefined,
-    }));
+    .filter((item) => item && (item.type === "image" || item.type === "video"))
+    .reduce<PostMedia[]>((result, item) => {
+      const safeUrl = toSafeAssetUrl(item.url);
+
+      if (!safeUrl) {
+        return result;
+      }
+
+      result.push({
+        type: item.type,
+        url: safeUrl,
+        alt: item.alt?.trim() || undefined,
+        caption: item.caption?.trim() || undefined,
+      });
+
+      return result;
+    }, []);
 }
 
 function normalizePostInput(input: CreatePostInput) {
@@ -109,7 +142,7 @@ function normalizePostInput(input: CreatePostInput) {
     summary,
     tags: input.tags.map((tag) => tag.trim()).filter(Boolean),
     content: input.content,
-    coverImage: input.coverImage?.trim() || null,
+    coverImage: toSafeAssetUrl(input.coverImage) ?? null,
     media: normalizeMedia(input.media),
     published: input.published ?? false,
   };

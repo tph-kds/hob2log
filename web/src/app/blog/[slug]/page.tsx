@@ -1,7 +1,7 @@
 import Link from "next/link";
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { MarkdownRenderer } from "@/components/blog/markdown-renderer";
+import { PostChatbot } from "@/components/blog/post-chatbot";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { isAdminSessionAuthorized } from "@/lib/admin-session";
 import { getPostBySlug, listPosts } from "@/lib/posts-store";
@@ -83,6 +83,29 @@ function getRelatedPosts(currentPost: Post, items: Post[]) {
     .slice(0, 3);
 }
 
+function sanitizeAssetSrc(value: string | undefined) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("/")) {
+    return trimmed;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function BlogPostPage({ params, searchParams }: BlogPostPageProps) {
   const { slug } = await params;
   const query = await searchParams;
@@ -97,6 +120,7 @@ export default async function BlogPostPage({ params, searchParams }: BlogPostPag
 
   const tableOfContents = getTableOfContents(post.content);
   const relatedPosts = getRelatedPosts(post, allPosts);
+  const safeCoverImage = sanitizeAssetSrc(post.coverImage);
 
   return (
     <div className="page-shell">
@@ -130,15 +154,13 @@ export default async function BlogPostPage({ params, searchParams }: BlogPostPag
               <h1 className="mt-3 text-4xl font-semibold leading-tight">{post.title}</h1>
               <p className="mt-3 text-sm text-(--muted)">{post.tags.join(" · ")}</p>
 
-              {post.coverImage ? (
+              {safeCoverImage ? (
                 <div className="relative mt-6 h-56 w-full overflow-hidden rounded-2xl border border-white/10 md:h-72">
-                  <Image
-                    src={post.coverImage}
+                  <img
+                    src={safeCoverImage}
                     alt={`Cover image for ${post.title}`}
-                    fill
-                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 75vw, 960px"
-                    className="object-cover"
-                    priority
+                    loading="eager"
+                    className="h-full w-full object-cover"
                   />
                 </div>
               ) : null}
@@ -151,25 +173,29 @@ export default async function BlogPostPage({ params, searchParams }: BlogPostPag
                 <section className="mt-8 space-y-4">
                   <h2 className="text-xl font-semibold">Media Attachments</h2>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    {post.media.map((item, index) => (
-                      <figure key={`${item.url}-${index}`} className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-3">
-                        {item.type === "video" ? (
-                          <video src={item.url} controls preload="metadata" className="h-auto w-full rounded-xl" />
-                        ) : (
-                          <div className="relative h-56 w-full overflow-hidden rounded-xl sm:h-64">
-                            <Image
-                              src={item.url}
-                              alt={item.alt || post.title}
-                              fill
-                              loading="lazy"
-                              sizes="(max-width: 768px) 100vw, 50vw"
-                              className="object-cover"
-                            />
-                          </div>
-                        )}
-                        {item.caption ? <figcaption className="mt-2 text-xs text-sky-100/75">{item.caption}</figcaption> : null}
-                      </figure>
-                    ))}
+                    {post.media.map((item, index) => {
+                      const safeMediaSrc = sanitizeAssetSrc(item.url);
+
+                      return (
+                        <figure key={`${item.url}-${index}`} className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-3">
+                          {item.type === "video" ? (
+                            safeMediaSrc ? <video src={safeMediaSrc} controls preload="metadata" className="h-auto w-full rounded-xl" /> : null
+                          ) : (
+                            <div className="relative h-56 w-full overflow-hidden rounded-xl sm:h-64">
+                              {safeMediaSrc ? (
+                                <img
+                                  src={safeMediaSrc}
+                                  alt={item.alt || post.title}
+                                  loading="lazy"
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : null}
+                            </div>
+                          )}
+                          {item.caption ? <figcaption className="mt-2 text-xs text-sky-100/75">{item.caption}</figcaption> : null}
+                        </figure>
+                      );
+                    })}
                   </div>
                 </section>
               ) : null}
@@ -245,6 +271,8 @@ export default async function BlogPostPage({ params, searchParams }: BlogPostPag
       </main>
 
       <SiteFooter />
+
+      <PostChatbot postSlug={post.slug} postTitle={post.title} />
     </div>
   );
 }

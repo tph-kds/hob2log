@@ -27,13 +27,7 @@ export function ChatWindow({ messages, isThinking, errorMessage }: ChatWindowPro
   return (
     <section className="post-chat-window" aria-live="polite">
       <div className="post-chat-window-scroll" ref={scrollRef}>
-        {messages.length === 0 ? (
-          <div className="post-chat-window-empty">
-            Ask for a summary, a key point recap, or related posts for this article.
-          </div>
-        ) : (
-          messages.map((message) => <MessageItem key={message.id} message={message} />)
-        )}
+        {messages.length > 0 ? messages.map((message) => <MessageItem key={message.id} message={message} />) : null}
 
         {isThinking ? <ThinkingIndicator /> : null}
 

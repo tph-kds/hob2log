@@ -6,6 +6,7 @@ interface PromptInput {
   question: string;
   sources: ChatContextSource[];
   history: ChatPromptMessage[];
+  memorySummary?: string;
 }
 
 function renderSources(sources: ChatContextSource[]) {
@@ -24,13 +25,23 @@ function renderSources(sources: ChatContextSource[]) {
 function trimHistory(history: ChatPromptMessage[]) {
   return history
     .filter((item) => item.role === "user" || item.role === "assistant")
-    .slice(-12);
+    .slice(-14);
+}
+
+function renderMemorySummary(memorySummary?: string) {
+  if (!memorySummary) {
+    return "No temporary memory summary yet.";
+  }
+
+  const compact = memorySummary.trim();
+  return compact ? compact : "No temporary memory summary yet.";
 }
 
 export function buildChatPrompt(input: PromptInput) {
   const system = [
     "You are a context-aware assistant for a technical blog.",
     "Prioritize the current post first, then related posts when needed.",
+    "When Retrieved Context includes a Blog Catalog source, use it to answer global blog questions (total posts, listing posts) precisely.",
     "Stay concise, factual, and practical.",
     "If the answer is not supported by context, say so clearly.",
     "When useful, reference sources using bracket indexes like [1], [2].",
@@ -39,6 +50,9 @@ export function buildChatPrompt(input: PromptInput) {
   const contextEnvelope = [
     `Current Post: ${input.post.title} (${input.post.slug})`,
     `Summary: ${input.post.summary}`,
+    "",
+    "Temporary Memory (TTL 6h):",
+    renderMemorySummary(input.memorySummary),
     "",
     "Retrieved Context:",
     renderSources(input.sources),

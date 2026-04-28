@@ -23,6 +23,8 @@ export interface ChatSessionSummary {
   updatedAt: string;
   expiresAt: string;
   messageCount: number;
+  memorySummary?: string;
+  previewContent?: string;
 }
 
 export interface ChatContextSource {

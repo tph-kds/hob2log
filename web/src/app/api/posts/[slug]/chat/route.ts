@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
-import { appendChatMessage, createOrReuseSession, deleteChatSession, getChatSessionMessages, listChatSessions } from "@/lib/chat-store";
+import {
+  appendChatMessage,
+  compactChatSessionMemory,
+  createOrReuseSession,
+  deleteChatSession,
+  getChatSessionMessages,
+  listChatSessions,
+} from "@/lib/chat-store";
 import { getChatContext } from "@/lib/chat-retriever";
 import { generateAssistantResponse } from "@/lib/llm/provider";
 import { buildChatPrompt } from "@/lib/prompt/build-chat-prompt";
@@ -100,6 +107,7 @@ export async function POST(request: Request, context: RouteContext) {
       question: message,
       sources: contextPayload.sources,
       history,
+      memorySummary: existing?.session.memorySummary,
     });
 
     await appendChatMessage({
@@ -123,6 +131,8 @@ export async function POST(request: Request, context: RouteContext) {
       content: answer.text,
       sources: prompt.sourceList,
     });
+
+    await compactChatSessionMemory(slug, sessionId);
 
     const metadata = {
       sessionId,

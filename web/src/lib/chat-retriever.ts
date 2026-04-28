@@ -7,6 +7,13 @@ const RELATED_POST_LIMIT = 4;
 const CHUNK_WORDS = 120;
 const CHUNK_OVERLAP = 24;
 
+const BLOG_COUNT_PATTERNS = [
+  /\bhow\s+many\b.*\b(posts?|articles?|blogs?)\b/i,
+  /\b(number|total|count)\b.*\b(posts?|articles?|blogs?)\b/i,
+  /\b(posts?|articles?)\b.*\b(count|number|total)\b/i,
+  /\blist\b.*\b(posts?|articles?)\b/i,
+];
+
 function normalizeText(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -93,6 +100,34 @@ function rankRelatedPosts(currentPost: Post, posts: Post[]) {
     .map((item) => item.post);
 }
 
+function shouldInjectBlogCatalog(question: string) {
+  const compact = question.trim();
+
+  if (!compact) {
+    return false;
+  }
+
+  return BLOG_COUNT_PATTERNS.some((pattern) => pattern.test(compact));
+}
+
+function buildBlogCatalogSource(posts: Post[]): ChatContextSource {
+  const lines = posts.slice(0, 24).map((post, index) => {
+    return `${index + 1}. ${post.title} (${post.slug})`;
+  });
+
+  const catalogChunk = [
+    `Published post count: ${posts.length}.`,
+    lines.length > 0 ? `Published posts:\n${lines.join("\n")}` : "No published posts were found.",
+  ].join("\n\n");
+
+  return {
+    slug: "blog-catalog",
+    title: "Blog Catalog",
+    score: 999,
+    chunk: catalogChunk,
+  };
+}
+
 function buildSources(question: string, posts: Array<{ post: Post; isCurrent: boolean }>, limit: number): ChatContextSource[] {
   const tokens = dedupeTokens(tokenize(question));
   const ranked: ChatContextSource[] = [];
@@ -133,6 +168,7 @@ export async function getChatContext(postSlug: string, question: string) {
 
   const allPosts = await listPosts({ includeDrafts: false, includeContent: true });
   const relatedPosts = rankRelatedPosts(currentPost, allPosts).slice(0, RELATED_POST_LIMIT);
+  const includeCatalog = shouldInjectBlogCatalog(question);
 
   const ranked = buildSources(
     question,
@@ -140,8 +176,12 @@ export async function getChatContext(postSlug: string, question: string) {
     CURRENT_POST_LIMIT + RELATED_POST_LIMIT,
   );
 
+  const sources = includeCatalog
+    ? [buildBlogCatalogSource(allPosts), ...ranked]
+    : ranked;
+
   return {
     currentPost,
-    sources: ranked,
+    sources,
   };
 }
